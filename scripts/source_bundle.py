@@ -33,6 +33,7 @@ def main() -> None:
                 for entry in source.infolist():
                     if not entry.is_dir():
                         target = zipfile.ZipInfo(prefix + directory + entry.filename, entry.date_time)
+                        target.create_system = entry.create_system
                         target.external_attr = entry.external_attr
                         target.compress_type = zipfile.ZIP_DEFLATED
                         output.writestr(target, source.read(entry))

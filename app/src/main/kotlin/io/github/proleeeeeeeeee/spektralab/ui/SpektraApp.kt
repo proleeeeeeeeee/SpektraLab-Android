@@ -250,7 +250,8 @@ private fun Choice(id: String, brand: String, name: String, selected: Boolean,
                 color = CanvasColor, fontSize = 12.sp)
         }
         Spacer(Modifier.height(7.dp))
-        if (brand.isNotBlank()) Text(brand, color = MutedColor, fontSize = 10.sp)
+        // Reserve the same caption line for all tabs so the photo never jumps.
+        Text(brand.ifBlank { " " }, color = MutedColor, fontSize = 10.sp)
         Text(name, color = if (selected) AccentColor else PaperWhite, fontSize = 12.sp,
             maxLines = 2, minLines = 2, lineHeight = 16.sp)
     }
