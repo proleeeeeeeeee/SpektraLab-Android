@@ -64,8 +64,7 @@ class MaterialPreviewStateTest {
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.error != null }
             assertNull("Failed material rendering must not retain the previous preview",model.state.value.preview)
             compose.runOnIdle { model.dismissError() }
-            compose.onNodeWithText("Original · preview unavailable").assertIsDisplayed()
-            compose.onNodeWithContentDescription("Original photograph").assertIsDisplayed()
+            compose.onNodeWithTag("editor-preview-image").assertIsDisplayed()
             privateFile!!.writeBytes(backup!!)
             compose.runOnIdle {
                 model.retryPreview()

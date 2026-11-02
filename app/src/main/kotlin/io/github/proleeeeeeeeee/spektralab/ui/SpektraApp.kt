@@ -52,205 +52,290 @@ fun SpektraApp(viewModel: EditorViewModel) {
     val lightModel: LightTableViewModel = viewModel()
     val sheetModel: ContactSheetViewModel = viewModel()
     val sheetState by sheetModel.state.collectAsStateWithLifecycle()
-    var sheetDraft by remember { mutableStateOf<ContactSheetDraft?>(null) }
-    val sheetLifecycle=androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(sheetLifecycle,sheetModel) {
-        val observer=androidx.lifecycle.LifecycleEventObserver { _,event -> if (event==androidx.lifecycle.Lifecycle.Event.ON_STOP) sheetModel.cancel() }
-        sheetLifecycle.addObserver(observer)
-        onDispose { sheetLifecycle.removeObserver(observer) }
-    }
-    var lightTable by rememberSaveable { mutableStateOf(false) }
-    var negativeScan by rememberSaveable { mutableStateOf(false) }
-    var returnToTable by rememberSaveable { mutableStateOf(false) }
-    fun backFromEditor() {
-        viewModel.showLibrary()
-        if (returnToTable) { lightTable=true;returnToTable=false }
-    }
-    var exportOptions by rememberSaveable { mutableStateOf(false) }
-    var about by rememberSaveable { mutableStateOf(false) }
-    var presets by rememberSaveable { mutableStateOf(false) }
-    var batch by rememberSaveable { mutableStateOf(false) }
+    val negativeModel: io.github.proleeeeeeeeee.spektralab.negative.NegativeScanViewModel = viewModel(key = "negative-scan")
+    val negativeState by negativeModel.state.collectAsStateWithLifecycle()
+    var page by rememberSaveable { mutableStateOf(WorkspacePage.PHOTOS) }
+    var materialReturn by rememberSaveable { mutableStateOf(WorkspacePage.PHOTOS) }
+    var settingsReturn by rememberSaveable { mutableStateOf(WorkspacePage.PHOTOS) }
+    var showLightTable by rememberSaveable { mutableStateOf(false) }
+    var editorReturnLightTable by rememberSaveable { mutableStateOf(false) }
+    var openingPhotoId by rememberSaveable { mutableStateOf<String?>(null) }
+    var overlay by rememberSaveable { mutableStateOf(WorkspaceOverlay.NONE) }
+    val exportSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var useCurrentLook by rememberSaveable { mutableStateOf(false) }
-    val multiplePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(100)) {
-        viewModel.importPhotos(it)
+    var importOrigin by rememberSaveable { mutableStateOf(WorkspacePage.PHOTOS) }
+    var sheetDraft by remember { mutableStateOf<ContactSheetDraft?>(null) }
+    val pages = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+    val busy = state.exporting || state.importing || sheetState.busy || negativeState.busy
+    var firstReadyObserved by remember { mutableStateOf(false) }
+    var previousShowEditor by remember { mutableStateOf(false) }
+
+    // Cold entry is the photo workspace. Later explicit import/open events may enter the editor.
+    LaunchedEffect(state.ready, state.showEditor, state.photo?.id) {
+        if (!state.ready) return@LaunchedEffect
+        if (!firstReadyObserved) {
+            firstReadyObserved = true
+            previousShowEditor = state.showEditor
+            if (page == WorkspacePage.PHOTOS) viewModel.prepareLightTable()
+        } else {
+            if (page == WorkspacePage.PHOTOS && state.showEditor && !previousShowEditor) {
+                openingPhotoId = state.photo?.id
+                editorReturnLightTable = showLightTable
+                page = WorkspacePage.EDITOR
+            }
+            previousShowEditor = state.showEditor
+        }
     }
-    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
-        viewModel.importPhotos(it)
+    LaunchedEffect(openingPhotoId, state.photo?.id, state.original) {
+        if (openingPhotoId != null && state.photo?.id == openingPhotoId && state.original != null)
+            openingPhotoId = null
     }
-    BackHandler(state.showEditor && !state.exporting && !lightTable) { backFromEditor() }
-    BackHandler(lightTable && !state.exporting) { lightTable=false;returnToTable=false;viewModel.showLibrary() }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, sheetModel) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) sheetModel.cancel()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    fun returnToPhotos() {
+        viewModel.showLibrary()
+        if (page == WorkspacePage.EDITOR) showLightTable = editorReturnLightTable
+        page = WorkspacePage.PHOTOS
+    }
+    fun openSettings() {
+        if (!busy) { settingsReturn = page; page = WorkspacePage.SETTINGS }
+    }
+    fun acceptImports(uris: List<Uri>) {
+        if (uris.isEmpty()) { page = importOrigin; return }
+        page = WorkspacePage.PHOTOS
+        editorReturnLightTable = false
+        if (uris.size == 1) viewModel.importPhoto(uris.single()) else viewModel.importPhotos(uris)
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(100), ::acceptImports)
+    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments(), ::acceptImports)
+    val importPhotos = { importOrigin = page; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    val importFiles = { importOrigin = page; files.launch(arrayOf("image/*", "application/octet-stream")) }
+    fun openMaterials() { materialReturn = page; viewModel.finishInteraction(); page = WorkspacePage.MATERIALS }
+    fun back() {
+        when (page) {
+            WorkspacePage.EDITOR -> returnToPhotos()
+            WorkspacePage.MATERIALS -> page = materialReturn
+            WorkspacePage.SETTINGS -> page = settingsReturn
+            else -> returnToPhotos()
+        }
+    }
+    BackHandler(page != WorkspacePage.PHOTOS && page != WorkspacePage.NEGATIVE && overlay == WorkspaceOverlay.NONE && !state.exporting && !sheetState.busy, ::back)
     SpektraTheme {
         Surface(Modifier.fillMaxSize(), color = CanvasColor) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                if (negativeScan) {
-                    io.github.proleeeeeeeeee.spektralab.negative.NegativeScanScreen(onBack={ negativeScan=false;viewModel.showLibrary() })
-                } else if (lightTable) {
-                    LightTableScreen(state.library.active,lightModel,
-                        onBack={ lightTable=false;returnToTable=false;viewModel.showLibrary() },
-                        onEdit={ id -> lightTable=false;returnToTable=true;viewModel.openPhoto(id) },
-                        onImport={ multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },importing=state.importing,canImport=state.ready,
-                        onExport={ ids -> if (viewModel.prepareBatchSelection(ids)) { useCurrentLook=false;batch=true } },suspended=batch || state.batchRunning || sheetDraft!=null || sheetState.busy || sheetState.outputs.isNotEmpty() || sheetState.error!=null,
-                        onContactSheet={ project,layout -> sheetDraft=ContactSheetDraft(project,layout) })
-                } else if (state.showEditor && state.original != null) {
-                    Editor(state, viewModel, onExport = { exportOptions = true },onPresets = { presets = true },
-                        onBack={ backFromEditor() },backLabel=if (returnToTable) "Back to light table" else "Back to photographs")
-                } else {
-                    ProjectLibrary(state,viewModel,
-                        onImport = { multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        onFiles = { files.launch(arrayOf("image/*","application/octet-stream")) },
-                        onAbout = { about = true },onPresets = { presets = true },onBatch = { batch = true },
-                        onLightTable={ viewModel.prepareLightTable();lightTable=true;returnToTable=false },
-                        onNegative={ viewModel.prepareLightTable();negativeScan=true;lightTable=false;returnToTable=false })
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    pages.SaveableStateProvider(page.name) {
+                        when (page) {
+                            WorkspacePage.PHOTOS -> PhotosWorkspace(
+                                state = state, model = viewModel, lightModel = lightModel,
+                                showLightTable = showLightTable, onViewChange = { showLightTable = it },
+                                onEdit = { id, fromTable ->
+                                    if (!busy) { openingPhotoId = id; editorReturnLightTable = fromTable; page = WorkspacePage.EDITOR; viewModel.openPhoto(id) }
+                                }, onImport = importPhotos, onFiles = importFiles, onSettings = ::openSettings,
+                                onPresets = { overlay = WorkspaceOverlay.PRESETS },
+                                onBatch = { useCurrentLook = false; overlay = WorkspaceOverlay.BATCH_EXPORT },
+                                onExportSelection = { ids -> if (viewModel.prepareBatchSelection(ids)) { useCurrentLook = false; overlay = WorkspaceOverlay.BATCH_EXPORT } },
+                                onContactSheet = { project, layout -> sheetDraft = ContactSheetDraft(project, layout) },
+                                suspended = overlay != WorkspaceOverlay.NONE || sheetDraft != null || state.batchRunning || sheetState.busy || sheetState.error != null || sheetState.outputs.isNotEmpty(),
+                            )
+                            WorkspacePage.EDITOR -> {
+                                if (state.original == null || (openingPhotoId != null && state.photo?.id != openingPhotoId)) {
+                                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                        CircularProgressIndicator()
+                                        Text("正在读取照片…", Modifier.padding(16.dp))
+                                        TextButton(onClick = ::returnToPhotos) { Text("返回照片") }
+                                    }
+                                } else Editor(state, viewModel, onExport = { overlay = WorkspaceOverlay.PHOTO_EXPORT },
+                                    onPresets = { overlay = WorkspaceOverlay.PRESETS }, onBack = ::returnToPhotos,
+                                    backLabel = if (editorReturnLightTable) "返回灯箱" else "返回照片", onMaterials = ::openMaterials)
+                            }
+                            WorkspacePage.MATERIALS -> MaterialBrowserScreen(state, viewModel,
+                                onBack = { page = materialReturn }, onChoosePhoto = importPhotos,
+                                onSettings = if (materialReturn == WorkspacePage.EDITOR) null else ::openSettings)
+                            WorkspacePage.NEGATIVE -> io.github.proleeeeeeeeee.spektralab.negative.NegativeScanScreen(
+                                onBack = ::returnToPhotos, model = negativeModel, onSettings = ::openSettings)
+                            WorkspacePage.SETTINGS -> SettingsScreen(state.capabilities, ::back)
+                        }
+                    }
+                }
+                if (page == WorkspacePage.PHOTOS || page == WorkspacePage.NEGATIVE || (page == WorkspacePage.MATERIALS && materialReturn != WorkspacePage.EDITOR)) {
+                    WorkspaceNavigation(page, !busy) { target ->
+                        if (target != page) {
+                            viewModel.finishInteraction(); viewModel.prepareLightTable()
+                            if (target == WorkspacePage.MATERIALS) materialReturn = WorkspacePage.PHOTOS
+                            page = target
+                        }
+                    }
                 }
             }
-            sheetDraft?.let { draft -> ContactSheetOptions(draft,sheetState.ready,sheetModel::start) { sheetDraft=null } }
-            if (sheetState.busy) AlertDialog(onDismissRequest={},title={ Text("Saving contact sheet") },
-                text={ Text("${sheetState.completed} / ${sheetState.total} photographs. Keep the app open.") },
-                confirmButton={ TextButton(onClick=sheetModel::cancel) { Text("Cancel contact sheet") } })
-            if (sheetState.error!=null && !sheetState.busy) AlertDialog(onDismissRequest=sheetModel::discard,
-                title={ Text("Contact sheet not saved") },text={ Text(sheetState.error.orEmpty()) },
-                confirmButton={ TextButton(onClick=sheetModel::retry,enabled=sheetState.canRetry) { Text("Retry contact sheet") } },
-                dismissButton={ TextButton(onClick=sheetModel::discard) { Text("Discard sheet request") } })
-            if (sheetState.outputs.isNotEmpty() && !sheetState.busy) AlertDialog(onDismissRequest=sheetModel::dismissOutputs,
-                title={ Text("Contact sheet saved") },text={ Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("${sheetState.outputs.size} ${if (sheetState.outputs.size==1) "file" else "files"} in Downloads / SpektraLab")
-                    sheetState.outputs.forEachIndexed { index,uri -> TextButton(onClick={
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,context.contentResolver.getType(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
-                            .onFailure { android.widget.Toast.makeText(context,"Saved in Downloads / SpektraLab",android.widget.Toast.LENGTH_LONG).show() }
-                    }) { Text("Open file ${index+1}") } }
-                } },confirmButton={ TextButton(onClick=sheetModel::dismissOutputs) { Text("Continue selecting") } })
-            if (state.error != null) AlertDialog(
-                onDismissRequest = viewModel::dismissError,
-                title = { Text(if (state.ready) "Processing paused" else "Engine unavailable") },
-                text = { Text(state.error.orEmpty()) },
-                confirmButton = { TextButton(onClick = viewModel::retryPreview) { Text("Retry") } },
-                dismissButton = { TextButton(onClick = viewModel::dismissError) { Text("Close") } },
-            )
-            if (state.savedUri != null) AlertDialog(
-                onDismissRequest = viewModel::dismissSaved,
-                title = { Text("Photograph saved") },
-                text = { Text("Find your photograph in Pictures / SpektraLab. Your original is unchanged.") },
+            sheetDraft?.let { draft -> ContactSheetOptions(draft, sheetState.ready, sheetModel::start) { sheetDraft = null } }
+            if (sheetState.busy) AlertDialog(onDismissRequest = {}, title = { Text("正在导出接触印样") },
+                text = { Text("${sheetState.completed} / ${sheetState.total} 张照片，请保持应用打开。") },
+                confirmButton = { TextButton(onClick = sheetModel::cancel, modifier = Modifier.testTag("sheet-cancel")) { Text("取消导出") } })
+            if (sheetState.error != null && !sheetState.busy) AlertDialog(onDismissRequest = sheetModel::discard,
+                title = { Text("接触印样未保存") }, text = { Text(uiMessage(sheetState.error.orEmpty()), Modifier.testTag("sheet-error-message")) },
+                confirmButton = { TextButton(onClick = sheetModel::retry, enabled = sheetState.canRetry, modifier = Modifier.testTag("sheet-retry")) { Text("重试导出") } },
+                dismissButton = { TextButton(onClick = sheetModel::discard, modifier = Modifier.testTag("sheet-discard")) { Text("放弃本次导出") } })
+            if (sheetState.outputs.isNotEmpty() && !sheetState.busy) AlertDialog(onDismissRequest = sheetModel::dismissOutputs,
+                title = { Text("接触印样已保存", Modifier.testTag("sheet-saved-title")) }, text = {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text("${sheetState.outputs.size} 个文件，位于 下载 / SpektraLab")
+                        sheetState.outputs.forEachIndexed { index, uri -> TextButton(onClick = {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                                .onFailure { android.widget.Toast.makeText(context, "已保存至 下载 / SpektraLab", android.widget.Toast.LENGTH_LONG).show() }
+                        }) { Text("打开文件 ${index + 1}") } }
+                    }
+                }, confirmButton = { TextButton(onClick = sheetModel::dismissOutputs, modifier = Modifier.testTag("sheet-dismiss")) { Text("继续选片") } })
+            if (state.error != null && page != WorkspacePage.NEGATIVE && page != WorkspacePage.SETTINGS) AlertDialog(
+                onDismissRequest = viewModel::dismissError, title = { Text(if (state.ready) "处理未完成" else "渲染引擎尚未就绪") },
+                text = { Text(uiMessage(state.error.orEmpty())) },
+                confirmButton = { TextButton(onClick = {
+                    val pending = openingPhotoId
+                    if (page == WorkspacePage.EDITOR && pending != null && pending != state.photo?.id) { viewModel.dismissError(); viewModel.openPhoto(pending) }
+                    else viewModel.retryPreview()
+                }) { Text("重试") } }, dismissButton = { TextButton(onClick = viewModel::dismissError) { Text("关闭") } })
+            if (state.savedUri != null) AlertDialog(onDismissRequest = viewModel::dismissSaved,
+                title = { Text("照片已保存") }, text = { Text("位于 相册 / SpektraLab，原片保持不变。") },
                 confirmButton = { TextButton(onClick = {
                     val uri = state.savedUri ?: return@TextButton
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri) ?: "image/*")
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }.onFailure {
-                        android.widget.Toast.makeText(context,"Saved successfully. Install a compatible viewer for this format.",android.widget.Toast.LENGTH_LONG).show()
-                    }
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri) ?: "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                        .onFailure { android.widget.Toast.makeText(context, "照片已保存，可在相册中查看。", android.widget.Toast.LENGTH_LONG).show() }
                     viewModel.dismissSaved()
-                }) { Text("Open in Photos") } },
-                dismissButton = { TextButton(onClick = viewModel::dismissSaved) { Text("Continue editing") } },
-            )
-            if (exportOptions) ModalBottomSheet(onDismissRequest = { exportOptions = false }) {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                ExportOptions { settings ->
-                    exportOptions = false
-                    viewModel.export(settings)
-                }
-                }
+                }) { Text("打开照片") } }, dismissButton = { TextButton(onClick = viewModel::dismissSaved) { Text("继续编辑") } })
+            if (overlay == WorkspaceOverlay.PHOTO_EXPORT) ModalBottomSheet(
+                onDismissRequest = { overlay = WorkspaceOverlay.NONE },
+                sheetState = exportSheetState
+            ) {
+                PhotoExportOptions(onSave = { overlay = WorkspaceOverlay.NONE; viewModel.export(it) }, onClose = { overlay = WorkspaceOverlay.NONE }, ready = state.ready && !state.importing)
             }
-            if (batch) ModalBottomSheet(onDismissRequest = { batch = false }) {
-                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text((if (state.selection.isEmpty()) state.library.active.photos.size else state.selection.size).toString()+" photographs in this export",Modifier.weight(1f).padding(horizontal=8.dp,vertical=8.dp),fontSize=13.sp)
-                        TextButton(onClick={ batch=false },modifier=Modifier.semantics { contentDescription="Close batch export" }) { Text("Close") }
-                    }
-                    Row(Modifier.padding(horizontal = 24.dp),verticalAlignment = Alignment.CenterVertically) {
-                        Text("Use current look for every photograph",Modifier.weight(1f),fontSize = 13.sp)
-                        Checkbox(useCurrentLook,{ useCurrentLook = it })
-                    }
-                    if (state.library.queue.jobs.isNotEmpty()) {
-                        Row(Modifier.padding(horizontal = 16.dp)) {
-                            TextButton(onClick = { batch = false; viewModel.resumeBatch() },enabled = state.library.queue.pending > 0) { Text("Resume queue") }
-                            TextButton(onClick = { batch = false; viewModel.retryFailedBatch() },enabled = state.library.queue.failed > 0) { Text("Retry failed") }
-                            TextButton(onClick = viewModel::clearQueue) { Text("Clear queue") }
+            if (overlay == WorkspaceOverlay.BATCH_EXPORT) ModalBottomSheet(
+                onDismissRequest = { overlay = WorkspaceOverlay.NONE },
+                sheetState = exportSheetState
+            ) {
+                val count = if (state.selection.isEmpty()) state.library.active.photos.size else state.selection.size
+                PhotoExportOptions(onSave = { overlay = WorkspaceOverlay.NONE; viewModel.startBatch(it, useCurrentLook) }, onClose = { overlay = WorkspaceOverlay.NONE },
+                    scopeSummary = if (state.selection.isEmpty()) "整个项目，共 $count 张" else "已选 $count 张照片", ready = state.ready && !state.importing, photoCount = count,
+                    extraOptions = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(useCurrentLook, { useCurrentLook = it }, Modifier.testTag("batch-current-look"))
+                            Text("所有照片使用当前效果；关闭时保留各自配方", Modifier.weight(1f))
                         }
-                        state.library.queue.jobs.filter { it.error != null }.forEach { job ->
-                            Text(job.error.orEmpty(),Modifier.padding(horizontal = 24.dp),fontSize = 12.sp,color = MaterialTheme.colorScheme.error)
+                        if (state.library.queue.jobs.isNotEmpty()) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { overlay = WorkspaceOverlay.NONE; viewModel.resumeBatch() }, enabled = state.library.queue.pending > 0) { Text("继续队列") }
+                                TextButton(onClick = { overlay = WorkspaceOverlay.NONE; viewModel.retryFailedBatch() }, enabled = state.library.queue.failed > 0) { Text("重试失败项") }
+                                TextButton(onClick = viewModel::clearQueue) { Text("清空队列") }
+                            }
+                            state.library.queue.jobs.filter { it.error != null }.forEach { Text(uiMessage(it.error.orEmpty()), color = MaterialTheme.colorScheme.error) }
                         }
-                    }
-                    ExportOptions { settings -> batch = false; viewModel.startBatch(settings,useCurrentLook) }
-                }
+                    })
             }
-            if (presets) PresetDialog(state,viewModel) { presets = false }
-            if (state.notice != null) AlertDialog(onDismissRequest = viewModel::dismissNotice,
-                text = { Text(state.notice.orEmpty()) },confirmButton = { TextButton(onClick = viewModel::dismissNotice) { Text("OK") } })
-            if (state.exporting) AlertDialog(
-                onDismissRequest = {},
-                title = { Text(if (state.batchRunning) "Batch export" else "Saving photograph") },
-                text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                    Text(if (state.batchRunning) state.library.queue.completed.toString()+" / "+state.library.queue.jobs.size+
-                        " saved. Keep the app open." else "Processing locally. Keep the app open.")
-                } },
-                confirmButton = { TextButton(onClick = viewModel::cancelExport) { Text("Cancel") } },
-            )
-            if (about) AboutDialog(state.capabilities) { about = false }
+            if (overlay == WorkspaceOverlay.PRESETS) PresetDialog(state, viewModel) { overlay = WorkspaceOverlay.NONE }
+            if (state.notice != null && page != WorkspacePage.NEGATIVE) AlertDialog(onDismissRequest = viewModel::dismissNotice,
+                text = { Text(uiMessage(state.notice.orEmpty())) }, confirmButton = { TextButton(onClick = viewModel::dismissNotice) { Text("知道了") } })
+            if (state.exporting) AlertDialog(onDismissRequest = {}, title = { Text(if (state.batchRunning) "正在批量导出" else "正在保存照片") },
+                text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text(if (state.batchRunning) "${state.library.queue.completed} / ${state.library.queue.jobs.size} 张已保存，请保持应用打开。" else "正在本机处理，请保持应用打开。")
+                } }, confirmButton = { TextButton(onClick = viewModel::cancelExport) { Text("取消导出") } })
         }
     }
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit,onBack: ()->Unit,backLabel: String) {
-    var tool by rememberSaveable { mutableStateOf(EditorTool.LOOKS) }
+private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit,
+                   onBack: () -> Unit, backLabel: String, onMaterials: () -> Unit) {
+    var pane by rememberSaveable { mutableStateOf(EditorPane.FILM) }
+    var panelOpen by rememberSaveable { mutableStateOf(true) }
+    var floatingPanel by rememberSaveable { mutableStateOf(false) }
+    val floatingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var cropping by rememberSaveable { mutableStateOf(false) }
     var more by rememberSaveable { mutableStateOf(false) }
     var savePreset by remember { mutableStateOf(false) }
     var includeComposition by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack, modifier = Modifier.width(48.dp),
-                contentPadding = PaddingValues(0.dp)) { Text("‹", fontSize = 30.sp, modifier = Modifier.semantics { contentDescription = backLabel }) }
-            Text(state.photo?.displayName ?: "Photograph", Modifier.weight(1f), maxLines = 1,
-                overflow = TextOverflow.Ellipsis, fontSize = 13.sp, color = MutedColor)
-            TextButton(onClick = model::undo, enabled = state.canUndo,
-                modifier = Modifier.width(48.dp), contentPadding = PaddingValues(0.dp)) {
-                Text("↶", fontSize = 24.sp, modifier = Modifier.semantics { contentDescription = "Undo" })
+    Column(Modifier.fillMaxSize().testTag("editor-screen")) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-back"), contentPadding = PaddingValues(0.dp)) {
+                Text("‹", fontSize = 30.sp, modifier = Modifier.semantics { contentDescription = backLabel })
             }
-            TextButton(onClick = model::redo, enabled = state.canRedo,
-                modifier = Modifier.width(48.dp), contentPadding = PaddingValues(0.dp)) {
-                Text("↷", fontSize = 24.sp, modifier = Modifier.semantics { contentDescription = "Redo" })
+            Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                Text(state.photo?.displayName ?: "照片", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                Text(Materials.film(state.recipe.filmId).name + " / " + Materials.paper(state.recipe.paperId).name,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp, color = MutedColor)
             }
-            TextButton(onClick = onExport, enabled = state.ready && !state.importing) { Text("Export") }
+            TextButton(onClick = { model.finishInteraction(); more = true }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-more")) { Text("⋯", fontSize = 25.sp) }
+            TextButton(onClick = onExport, enabled = state.ready && !state.importing, modifier = Modifier.heightIn(min = 48.dp).testTag("editor-export")) { Text("导出") }
         }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val portraitControlsMaxHeight = maxHeight * .55f
-            val controls: @Composable ()->Unit = {
-        when (tool) {
-            EditorTool.LOOKS -> MaterialControls(state, model)
-            EditorTool.ADJUST -> AdjustmentControls(state, model)
-            EditorTool.COMPOSE -> CompositionControls(state, model, onCrop = { model.finishInteraction(); cropping = true })
-        }
-        Row(Modifier.fillMaxWidth().background(PanelColor), horizontalArrangement = Arrangement.SpaceEvenly) {
-            EditorTool.entries.forEach { value ->
-                TextButton(onClick = { model.finishInteraction(); tool = value }) {
-                    Text(value.label, color = if (tool == value) AccentColor else MutedColor)
+            val tallText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.35f
+            val wide = maxWidth >= 540.dp && maxWidth > maxHeight
+            val controlsMaxHeight = maxHeight * .43f
+            val controls: @Composable () -> Unit = {
+                when (pane) {
+                    EditorPane.FILM -> MaterialControls(state, model, MaterialTab.FILM, onMaterials)
+                    EditorPane.PAPER -> MaterialControls(state, model, MaterialTab.PAPER, onMaterials)
+                    EditorPane.ADJUST -> AdjustmentControls(state, model)
+                    EditorPane.COMPOSE -> Column {
+                        Text("片框", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = MutedColor)
+                        LazyRow(Modifier.testTag("frame-options"), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                            items(FilmFrame.entries, key = { it.name }) { frame -> Choice(frame.name, "", frame.uiLabel(), frame == state.recipe.frame, frame = frame, onClick = { model.selectFrame(frame) }) }
+                        }
+                        CompositionControls(state, model, onCrop = { model.finishInteraction(); cropping = true })
+                    }
                 }
             }
-            TextButton(onClick = { model.finishInteraction(); more = true }) { Text("More",color = MutedColor) }
-        }
+            val tools: @Composable () -> Unit = {
+                FlowRow(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    EditorPane.entries.forEach { item ->
+                        FilterChip(selected = pane == item && panelOpen, onClick = {
+                            model.finishInteraction(); pane = item
+                            when (item) { EditorPane.FILM -> model.selectTab(MaterialTab.FILM); EditorPane.PAPER -> model.selectTab(MaterialTab.PAPER); else -> Unit }
+                            if (tallText && !wide) floatingPanel = true else panelOpen = true
+                        }, label = { Text(item.title) }, modifier = Modifier.heightIn(min = 48.dp).testTag("editor-tool-${item.name.lowercase()}"))
+                    }
+                    TextButton(onClick = { model.finishInteraction(); panelOpen = !panelOpen }, modifier = Modifier.heightIn(min = 48.dp).testTag("editor-panel-toggle")) { Text(if (panelOpen) "收起" else "展开") }
+                }
             }
-            if (maxWidth>=540.dp && maxWidth>maxHeight) Row(Modifier.fillMaxSize()) {
-                PhotoPreview(state,model::moveFraming,Modifier.weight(1f).fillMaxHeight(),showGrid=tool==EditorTool.COMPOSE)
-                Column(Modifier.width(280.dp).fillMaxHeight().verticalScroll(rememberScrollState())) { controls() }
+            if (wide) Row(Modifier.fillMaxSize()) {
+                PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxHeight(), pane == EditorPane.COMPOSE, model::undo, model::redo)
+                Column(Modifier.width(296.dp).fillMaxHeight().verticalScroll(rememberScrollState())) { tools(); if (panelOpen) controls() }
             } else Column(Modifier.fillMaxSize()) {
-                PhotoPreview(state,model::moveFraming,Modifier.weight(1f).fillMaxWidth(),showGrid=tool==EditorTool.COMPOSE)
-                Column(Modifier.fillMaxWidth().heightIn(max=portraitControlsMaxHeight).verticalScroll(rememberScrollState())) { controls() }
+                PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth(), pane == EditorPane.COMPOSE, model::undo, model::redo)
+                if (panelOpen && !tallText) Column(Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight).verticalScroll(rememberScrollState())) { controls() }
+                tools()
+            }
+            if (floatingPanel) ModalBottomSheet(
+                onDismissRequest = { floatingPanel = false },
+                sheetState = floatingSheetState
+            ) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 640.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(pane.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                        TextButton(onClick = { floatingPanel = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("完成") }
+                    }
+                    controls()
+                }
             }
         }
     }
     if (cropping && state.original != null) CropSheet(state.original, state.recipe.composition.crop,
         onCancel = { cropping = false }, onApply = { model.crop(it); cropping = false })
-    if (more) EditorMoreSheet(state,model,includeComposition,{ includeComposition = it },
-        onClose = { more = false },onSavePreset = { more = false; savePreset = true },
-        onPresets = { more = false; onPresets() })
-    if (savePreset) NameDialog("Save preset",onClose = { savePreset = false }) {
-        model.savePreset(it,includeComposition); savePreset = false
-    }
+    if (more) EditorMoreSheet(state, model, includeComposition, { includeComposition = it },
+        onClose = { more = false }, onSavePreset = { more = false; savePreset = true }, onPresets = { more = false; onPresets() }, onBackToProject = onBack)
+    if (savePreset) NameDialog("保存预设", onClose = { savePreset = false }) { model.savePreset(it, includeComposition); savePreset = false }
 }
 
+
 @Composable
-private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit, modifier: Modifier, showGrid: Boolean = false) {
+private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit, modifier: Modifier, showGrid: Boolean = false, onUndo: () -> Unit = {}, onRedo: () -> Unit = {}) {
     var compare by remember { mutableStateOf(false) }
     val showingOriginal = compare || state.preview == null
     val photo = if (showingOriginal) state.original else state.preview
@@ -266,8 +351,8 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
                 onDrag = { change, amount -> change.consume(); x += amount.x; y += amount.y },
             )
         }, contentAlignment = Alignment.Center) {
-            photo?.let { Image(it.asImageBitmap(), if (showingOriginal) "Original photograph" else "Processed photograph",
-                Modifier.fillMaxSize().padding(horizontal = 4.dp), contentScale = ContentScale.Fit) }
+            photo?.let { Image(it.asImageBitmap(), if (showingOriginal) "原始照片" else "处理后照片",
+                Modifier.fillMaxSize().testTag("editor-preview-image").padding(horizontal = 4.dp), contentScale = ContentScale.Fit) }
             if (showGrid && photo != null && !compare) Canvas(Modifier.matchParentSize()) {
                 val scale = minOf((size.width - 8.dp.toPx()) / photo.width, size.height / photo.height)
                 val w = photo.width * scale; val h = photo.height * scale
@@ -280,75 +365,52 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
                 }
             }
             if (showingOriginal) Text(when {
-                compare -> "Original"
-                state.rendering -> "Original · developing preview"
-                else -> "Original · preview unavailable"
+                compare -> "原图"
+                state.rendering -> "原图 · 正在生成预览"
+                else -> "原图 · 预览不可用"
             }, Modifier.align(Alignment.TopStart).padding(12.dp)
                 .background(CanvasColor.copy(alpha = .85f), RoundedCornerShape(4.dp)).padding(8.dp), fontSize = 12.sp)
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            if (state.rendering) {
-                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
-                Spacer(Modifier.width(8.dp))
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onUndo, enabled = state.canUndo, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-undo")) {
+                Text("↶", fontSize = 24.sp, modifier = Modifier.semantics { contentDescription = "撤销" })
             }
-            Text(if (state.rendering) "Developing" else if (framed) "Drag photo to reframe" else "Preview",
-                Modifier.weight(1f), color = MutedColor, fontSize = 12.sp)
-            // Release, cancellation and navigation all restore the edited view.
-            Text("Hold original", Modifier.heightIn(min = 44.dp).wrapContentHeight()
-                .semantics { contentDescription = "Press and hold to compare with original" }
+            TextButton(onClick = onRedo, enabled = state.canRedo, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-redo")) {
+                Text("↷", fontSize = 24.sp, modifier = Modifier.semantics { contentDescription = "重做" })
+            }
+            Spacer(Modifier.weight(1f))
+            Text("按住原图", Modifier.heightIn(min = 48.dp).wrapContentHeight().padding(horizontal = 12.dp)
+                .testTag("editor-compare").semantics { contentDescription = "按住对比原图" }
                 .pointerInput(Unit) { detectTapGestures(onPress = {
                     compare = true
                     try { awaitRelease() } finally { compare = false }
-                }) }, color = MutedColor, fontSize = 12.sp)
+                }) }, color = MutedColor, fontSize = 14.sp)
         }
     }
 }
 
 @Composable
-private fun MaterialControls(state: EditorState, model: EditorViewModel) {
-    val artwork=if (state.material==MaterialTab.PAPER) rememberPaperSamples(state) else PaperSamplePresentation(PaperSampleState(),{})
-    val samples=artwork.state
-    var details by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().background(PanelColor).padding(bottom = 12.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            MaterialTab.entries.forEach { tab ->
-                val selected = state.material == tab
-                Column(Modifier.weight(1f).selectable(selected, role = Role.Tab, onClick = { model.selectTab(tab) })
-                    .padding(top = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(tab.label, color = if (selected) PaperWhite else MutedColor,
-                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
-                    Spacer(Modifier.height(13.dp))
-                    HorizontalDivider(thickness = if (selected) 2.dp else 1.dp,
-                        color = if (selected) AccentColor else MaterialTheme.colorScheme.outline)
-                }
+private fun MaterialControls(state: EditorState, model: EditorViewModel, tab: MaterialTab, onBrowse: () -> Unit) {
+    val artwork = if (tab == MaterialTab.PAPER) rememberPaperSamples(state) else PaperSamplePresentation(PaperSampleState(), {})
+    val samples = artwork.state
+    Column(Modifier.fillMaxWidth().background(PanelColor).padding(bottom = 8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (tab == MaterialTab.FILM) "胶片" else "相纸与印相材料", Modifier.weight(1f), color = MutedColor, fontSize = 13.sp)
+            TextButton(onClick = onBrowse, modifier = Modifier.heightIn(min = 48.dp).testTag("open-material-browser")) { Text("全部材料") }
+        }
+        LazyRow(Modifier.testTag("material-options"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (tab == MaterialTab.FILM) items(Materials.films, key = { it.id }) { film ->
+                Choice(film.id, film.brand, film.name, film.id == state.recipe.filmId, onClick = { model.selectFilm(film.id) })
+            } else items(Materials.compatiblePapers(state.recipe.filmId), key = { it.id }) { paper ->
+                Choice(paper.id, paper.brand, paper.name, paper.id == state.recipe.paperId, paper = true,
+                    sample = samples.images[paper.id], sampleLoading = samples.loading && paper.id !in samples.failed, onClick = { model.selectPaper(paper.id) })
             }
         }
-        LazyRow(Modifier.testTag("material-options"),contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            when (state.material) {
-                MaterialTab.FILM -> items(Materials.films, key = { it.id }) { film ->
-                    Choice(film.id, film.brand, film.name, film.id == state.recipe.filmId,
-                        onClick = { model.selectFilm(film.id) })
-                }
-                MaterialTab.PAPER -> items(Materials.compatiblePapers(state.recipe.filmId), key = { it.id }) { paper ->
-                    Choice(paper.id, paper.brand, paper.name, paper.id == state.recipe.paperId, paper = true, sample = samples.images[paper.id], sampleLoading = samples.loading && paper.id !in samples.failed,
-                        onClick = { model.selectPaper(paper.id) })
-                }
-                MaterialTab.FRAME -> items(FilmFrame.entries, key = { it.name }) { frame ->
-                    Choice(frame.name, "", frame.label, frame == state.recipe.frame, frame = frame,
-                        onClick = { model.selectFrame(frame) })
-                }
-            }
-        }
-        if (state.material==MaterialTab.PAPER) PaperGradeControls(state.recipe,model::selectPaperGrade)
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
-            TextButton(onClick={ details=true },enabled=state.material!=MaterialTab.FRAME) { Text("Material details / compare") }
-        }
-        if (samples.failed.isNotEmpty()) TextButton(onClick=artwork.retry,modifier=Modifier.align(Alignment.End)) { Text("Retry samples") }
+        if (tab == MaterialTab.PAPER) PaperGradeControls(state.recipe, model::selectPaperGrade)
+        if (samples.failed.isNotEmpty()) TextButton(onClick = artwork.retry, modifier = Modifier.align(Alignment.End).testTag("paper-samples-retry")) { Text("重试印相小样") }
     }
-    if (details) MaterialDetailsSheet(state,onApply={ id -> if (state.material==MaterialTab.PAPER) model.selectPaper(id) else model.selectFilm(id) }) { details=false }
 }
+
 
 @Composable
 private fun Choice(id: String, brand: String, name: String, selected: Boolean,
@@ -374,44 +436,30 @@ private fun Choice(id: String, brand: String, name: String, selected: Boolean,
 }
 
 @Composable
-private fun ExportOptions(onSave: (ExportSettings) -> Unit) {
-    var format by rememberSaveable { mutableStateOf(ExportFormat.JPEG) }
-    var quality by rememberSaveable { mutableFloatStateOf(95f) }
-    var resolution by rememberSaveable { mutableStateOf(ExportSize.COMPACT) }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-        Text("Export photograph", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(20.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ExportFormat.entries.forEach { value ->
-                FilterChip(selected = format == value, onClick = { format = value },
-                    enabled = value != ExportFormat.HDR_JPEG || android.os.Build.VERSION.SDK_INT >= 34,
-                    label = { Text(when (value) { ExportFormat.TIFF16 -> "TIFF · 16-bit";ExportFormat.HDR_JPEG -> "Ultra HDR";else -> value.name }) })
-            }
+private fun SettingsScreen(capabilities: String, onBack: () -> Unit) {
+    var about by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().testTag("settings-screen")) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp).testTag("settings-back")) { Text("返回") }
+            Text("设置与帮助", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ExportSize.entries.forEach { value ->
-                FilterChip(selected = resolution == value,onClick = { resolution = value },label = { Text(value.label) })
-            }
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text("SpektraLab", style = MaterialTheme.typography.headlineSmall)
+            Text("照片与暗房，在手机上完成。", color = MutedColor)
+            Text("普通照片", style = MaterialTheme.typography.titleMedium)
+            Text("在「照片」导入普通照片或 RAW，选择胶片、印相材料，再调整与构图。图库与灯箱显示同一项目，标记和筛选相互同步。")
+            Text("底片转正", style = MaterialTheme.typography.titleMedium)
+            Text("「工具」用于翻拍或扫描的真实胶片底片。先导入，再取样未曝光片基，成功后自动查看正片。普通照片加胶片效果请使用「照片」。")
+            Text("导出与原片", style = MaterialTheme.typography.titleMedium)
+            Text("导出会生成新文件，保留原片。照片位于 相册 / SpektraLab；接触印样位于 下载 / SpektraLab。处理时请保持应用打开，离开后可按实际任务提示重试或继续。")
+            Text("当前底片工具支持 8-bit JPEG / PNG，预览最长边 1024，导出 2560。它是创意转正流程，尚无真实底片色彩校准；不支持该流程的 RAW、16-bit 或 HDR。", color = MutedColor)
+            OutlinedButton(onClick = { about = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("settings-about")) { Text("版本、许可证与诊断") }
+            Text("所有处理在本机进行。应用没有联网权限、账号或分析服务。", color = MutedColor)
         }
-        if (format == ExportFormat.JPEG || format == ExportFormat.HDR_JPEG) {
-            Text("Quality " + quality.toInt(), color = MutedColor)
-            Slider(value = quality, onValueChange = { quality = it }, valueRange = 60f..100f, steps = 39)
-        }
-        val description = when (format) {
-            ExportFormat.TIFF16 -> "16-bit RGB from the float scan. Embedded sRGB profile. Larger, uncompressed files."
-            ExportFormat.HDR_JPEG -> "Calibrated HDR print with a new gain map. Android 14+ and a supported color paper. The editor shows the SDR base."
-            else -> "8-bit sRGB."
-        }
-        Text(description+"\n"+if (resolution == ExportSize.ORIGINAL)
-            "Full source pixels before crop and film edge. Memory and GPU limits apply; never silently resized.\nSaved to Pictures / SpektraLab."
-            else "Up to "+resolution.label+" before crop and film edge.\nSaved to Pictures / SpektraLab.",
-            color = MutedColor, style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(22.dp))
-        Button(onClick = { onSave(ExportSettings(format,resolution,quality.toInt())) }, Modifier.fillMaxWidth().heightIn(min = 52.dp),
-            shape = RoundedCornerShape(10.dp)) { Text("Save photograph") }
-        Spacer(Modifier.height(24.dp))
     }
+    if (about) AboutDialog(capabilities) { about = false }
 }
+
 
 @Composable
 private fun AboutDialog(capabilities: String, onClose: () -> Unit) {
@@ -428,19 +476,19 @@ private fun AboutDialog(capabilities: String, onClose: () -> Unit) {
     AlertDialog(onDismissRequest = onClose, title = { Text("SpektraLab for Android") },
         text = {
             Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState())) {
-                Text("An unofficial Android port by proleeeeeeeeee.\nVersion " +
-                    io.github.proleeeeeeeeee.spektralab.BuildConfig.VERSION_NAME + " · Device test build")
+                Text("由 proleeeeeeeeee 维护的非官方 Android 版本。\n版本 " +
+                    io.github.proleeeeeeeeee.spektralab.BuildConfig.VERSION_NAME + " · 测试版本")
                 Spacer(Modifier.height(16.dp))
-                Text("Built on SpektraLab by JamesQiu2005 and the Spektrafilm engine and profiles by Andrea Volpato. Code: GPLv3. Film and paper data: CC BY-SA 4.0.")
+                Text("基于 JamesQiu2005 的 SpektraLab，以及 Andrea Volpato 的 Spektrafilm 引擎和材料数据。代码：GPLv3；胶片与印相数据：CC BY-SA 4.0。")
                 Spacer(Modifier.height(12.dp))
-                Text("Processing is entirely on this device. No network permission, analytics or account. Selected originals, projects and presets are stored privately. Batch queues can be resumed after reopening the app.")
+                Text("所有处理在本机完成，无联网权限、分析服务或账号。原片、项目和预设保存在应用私有空间，批量队列可在重新打开后继续。")
                 TextButton(onClick = {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/proleeeeeeeeee/SpektraLab-Android")))
-                }) { Text("Source code") }
-                TextButton(onClick = { notices = !notices }) { Text("Licenses and acknowledgements") }
-                if (notices) Text(licenseText.ifBlank { "Loading licenses" }, fontSize = 11.sp)
-                TextButton(onClick = { diagnostics = !diagnostics }) { Text("GPU diagnostics") }
-                if (diagnostics) Text(capabilities.ifBlank { "Engine not initialized" }, fontSize = 11.sp)
+                }) { Text("源代码") }
+                TextButton(onClick = { notices = !notices }) { Text("许可证与致谢") }
+                if (notices) Text(licenseText.ifBlank { "正在读取许可证…" }, fontSize = 11.sp)
+                TextButton(onClick = { diagnostics = !diagnostics }) { Text("图形引擎诊断") }
+                if (diagnostics) Text(capabilities.ifBlank { "引擎尚未初始化" }, fontSize = 11.sp)
             }
-        }, confirmButton = { TextButton(onClick = onClose) { Text("Close") } })
+        }, confirmButton = { TextButton(onClick = onClose) { Text("关闭") } })
 }

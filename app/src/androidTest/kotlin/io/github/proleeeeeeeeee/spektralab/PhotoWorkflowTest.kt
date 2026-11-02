@@ -84,33 +84,32 @@ class PhotoWorkflowTest {
                     state.error != null
             }
             assertNull(model.state.value.error)
-            compose.onNodeWithText("Adjust", useUnmergedTree = true).performClick()
-            compose.onNodeWithContentDescription("Exposure adjustment", useUnmergedTree = true)
+            compose.onNodeWithTag("editor-tool-adjust", useUnmergedTree = true).performClick()
+            compose.onNodeWithContentDescription("曝光调整", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(0.75f) }
             compose.runOnIdle { model.finishInteraction() }
             assertEquals(.75,model.state.value.recipe.adjustments.exposure,.01)
-            compose.onNodeWithContentDescription("Undo", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-undo", useUnmergedTree = true).performClick()
             assertEquals(0.0,model.state.value.recipe.adjustments.exposure,.01)
-            compose.onNodeWithText("Compose", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("Rotate 90°", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-tool-compose", useUnmergedTree = true).performClick()
+            compose.onNodeWithText("旋转 90°", useUnmergedTree = true).performClick()
             assertEquals(1,model.state.value.recipe.composition.quarterTurns)
-            compose.onNodeWithText("Free crop", useUnmergedTree = true).performClick()
-            compose.onNodeWithContentDescription("Crop width", useUnmergedTree = true)
+            compose.onNodeWithText("自由裁切", useUnmergedTree = true).performClick()
+            compose.onNodeWithContentDescription("裁切宽度", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(.7f) }
-            compose.onNodeWithText("Apply crop", useUnmergedTree = true).performClick()
+            compose.onNodeWithText("应用裁切", useUnmergedTree = true).performClick()
             assertEquals(.7,model.state.value.recipe.composition.crop.width,.01)
-            compose.onNodeWithText("Looks", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("Paper", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("Vision 2383", useUnmergedTree = true).performScrollTo().performClick()
-            compose.onNodeWithText("Frame", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("120 · 6×6", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("editor-tool-paper", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("material-choice-kodak_2383", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("editor-tool-compose", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("material-choice-SQUARE_120", useUnmergedTree = true).performScrollTo().performClick()
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.recipe.frame == FilmFrame.SQUARE_120 }
-            compose.onNodeWithContentDescription("Undo", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-undo", useUnmergedTree = true).performClick()
             assertEquals(FilmFrame.NONE, model.state.value.recipe.frame)
-            compose.onNodeWithContentDescription("Redo", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("Export", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("PNG", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("Save photograph", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-redo", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-export", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("photo-format-PNG", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("photo-export-save", useUnmergedTree = true).performClick()
             compose.waitUntil(180_000) { model.state.value.savedUri != null || model.state.value.error != null }
             assertNull(model.state.value.error)
             exported = model.state.value.savedUri
@@ -119,14 +118,14 @@ class PhotoWorkflowTest {
             assertNotNull(result)
             assertTrue(result.width > 0 && result.height > 0)
             assertTrue(result.width.toDouble() / result.height in .85..1.15)
-            compose.onNodeWithText("Photograph saved").assertIsDisplayed()
+            compose.onNodeWithText("照片已保存").assertIsDisplayed()
             val permissions = context.packageManager.getPackageInfo(context.packageName,
                 android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
             assertFalse(permissions.contains("android.permission.INTERNET"))
             assertFalse(permissions.any { it.contains("READ_MEDIA") || it.contains("EXTERNAL_STORAGE") })
             // Recreating the Activity must preserve the current edit and private import.
             compose.activityRule.scenario.recreate()
-            compose.onNodeWithText("Export", useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithTag("editor-export", useUnmergedTree = true).assertIsDisplayed()
         } finally {
             resolver.delete(source, null, null)
             exported?.let { resolver.delete(it, null, null) }

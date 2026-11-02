@@ -41,8 +41,15 @@ class MaterialDetailsWorkflowTest {
         compose.waitUntil(120_000) { compose.onAllNodesWithTag("comparison-current").fetchSemanticsNodes().size==1 && compose.onAllNodesWithTag("comparison-alternative").fetchSemanticsNodes().size==1 }
     }
     private fun choose(id: String) {
+        val before=ViewModelProvider(compose.activity)[EditorViewModel::class.java].state.value.recipe
         compose.onNodeWithTag("comparison-choice").performScrollTo().performClick()
         compose.onNodeWithTag("comparison-option-$id").performScrollTo().performClick();waitImages()
+        assertEquals("Choosing a comparison must not apply it",before,ViewModelProvider(compose.activity)[EditorViewModel::class.java].state.value.recipe)
+    }
+    private fun openComparison(wait: Boolean=true) {
+        compose.onNodeWithTag("material-details").performScrollTo().performClick()
+        compose.onNodeWithTag("comparison-start").performScrollTo().performClick()
+        if (wait) waitImages()
     }
     private fun match(tag: String,expected: Bitmap): Double {
         val node=compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
@@ -79,6 +86,7 @@ class MaterialDetailsWorkflowTest {
             compose.waitUntil(120_000) { model.state.value.photo?.displayName=="comparison-real.png" && !model.state.value.importing && !model.state.value.rendering && model.state.value.preview!=null }
             compose.runOnIdle { model.adjust(Adjustment.GRAIN,0f);model.adjust(Adjustment.HALATION,0f);model.finishInteraction() }
             compose.waitUntil(120_000) { !model.state.value.rendering }
+            compose.onNodeWithTag("open-material-browser").performClick()
             val photo=model.state.value.photo!!;file=runBlocking { PhotoStore(context).source(photo) };backup=file!!.readBytes()
             fun verify(alternative: EditRecipe,label: String) {
                 waitImages();val current=model.state.value.recipe
@@ -92,36 +100,36 @@ class MaterialDetailsWorkflowTest {
                 } finally { images.forEach { it.recycle() } }
                 capture(label)
             }
-            compose.onNodeWithText("Material details / compare").performClick();waitImages()
-            compose.onNodeWithText("Material details").assertIsDisplayed()
+            openComparison()
+            compose.onNodeWithTag("material-details-title").assertIsDisplayed()
             choose("kodak_portra_800");verify(model.state.value.recipe.withFilm("kodak_portra_800"),"film-portra800")
             compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED);waitImages()
             verify(model.state.value.recipe.withFilm("kodak_portra_800"),"background-restored")
-            compose.onNodeWithText("Close details").performScrollTo().performClick()
+            compose.onNodeWithTag("comparison-close").performScrollTo().performClick()
             file!!.writeBytes(byteArrayOf(0,1,2,3))
-            compose.onNodeWithText("Material details / compare").performClick()
-            compose.waitUntil(120_000) { compose.onAllNodesWithText("Retry comparison").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Apply alternative").assertIsNotEnabled();capture("failure")
+            openComparison(wait=false)
+            compose.waitUntil(120_000) { compose.onAllNodesWithTag("comparison-retry").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("comparison-apply").assertIsNotEnabled();capture("failure")
             file!!.writeBytes(backup!!)
-            compose.onNodeWithText("Retry comparison").performScrollTo().performClick();waitImages()
+            compose.onNodeWithTag("comparison-retry").performScrollTo().performClick();waitImages()
             choose("kodak_portra_800");verify(model.state.value.recipe.withFilm("kodak_portra_800"),"retry-restored")
-            compose.onNodeWithText("Apply alternative").performScrollTo().performClick()
+            compose.onNodeWithTag("comparison-apply").performScrollTo().performClick()
             compose.waitUntil(120_000) { model.state.value.recipe.filmId=="kodak_portra_800" && !model.state.value.rendering && model.state.value.preview!=null }
-            compose.onNodeWithText("Paper").performClick();compose.onNodeWithText("Material details / compare").performClick();waitImages()
+            compose.onNodeWithTag("material-tab-paper").performClick();openComparison()
             choose("kodak_2393");verify(model.state.value.recipe.copy(paperId="kodak_2393"),"print-2393")
-            compose.onNodeWithText("Apply alternative").performScrollTo().performClick()
+            compose.onNodeWithTag("comparison-apply").performScrollTo().performClick()
             compose.waitUntil(120_000) { model.state.value.recipe.paperId=="kodak_2393" && !model.state.value.rendering }
-            compose.onNodeWithText("Material details / compare").performClick()
-            compose.onNodeWithText("Cinema print film").performScrollTo().assertIsDisplayed();capture("cinema-identity")
-            compose.onNodeWithText("Close details").performScrollTo().performClick()
+            compose.onNodeWithTag("material-details").performScrollTo().performClick()
+            compose.onNodeWithTag("material-details-kind").performScrollTo().assertIsDisplayed().assertTextEquals("电影正片");capture("cinema-identity")
+            compose.onNodeWithTag("comparison-close").performScrollTo().performClick()
             compose.runOnIdle { model.selectFilm("ilford_hp5_plus_400");model.selectTab(MaterialTab.PAPER) }
             compose.waitUntil(120_000) { !model.state.value.rendering }
-            compose.onNodeWithText("Material details / compare").performClick()
-            compose.onNodeWithText("This film currently has one compatible print material.").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("material-details").performScrollTo().performClick()
+            compose.onNodeWithTag("material-single-compatible").performScrollTo().assertIsDisplayed()
             compose.onAllNodesWithTag("comparison-current").assertCountEquals(0)
-            compose.onNodeWithText("Black-and-white photographic paper").performScrollTo().assertIsDisplayed();capture("monochrome-compatible")
-            compose.onNodeWithText("Close details").performScrollTo().performClick()
+            compose.onNodeWithTag("material-details-kind").performScrollTo().assertIsDisplayed().assertTextEquals("黑白相纸");capture("monochrome-compatible")
+            compose.onNodeWithTag("comparison-close").performScrollTo().performClick()
             File(context.filesDir,"stage1-evidence/material-details-report.json").writeText(org.json.JSONObject().put("realPhoto",true).put("pixelMatches",matches).put("sourceFailureRetry",true).put("filmAndPrintApply",true).put("lifecycleRestore",true).put("monochromeSingleCompatible",true).toString(2))
         } catch (failure: Throwable) { runCatching { capture("test-failure") };throw failure }
         finally {

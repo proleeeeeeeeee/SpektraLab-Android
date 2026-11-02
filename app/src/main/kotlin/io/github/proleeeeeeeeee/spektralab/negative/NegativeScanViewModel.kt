@@ -17,11 +17,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
+data class NegativeSampleSuccess(val sequence: Long, val requestId: Long, val photoId: String)
+
 data class NegativeScanState(
     val roll: NegativeRoll = NegativeRoll(), val ready: Boolean = false, val loading: Boolean = false,
     val negative: Bitmap? = null, val positive: Bitmap? = null, val previewId: String? = null,
     val importing: Boolean = false, val exporting: Boolean = false, val sampling: Boolean = false,
     val error: String? = null, val message: String? = null,
+    val sampleRequestId: Long = 0, val sampleSuccess: NegativeSampleSuccess? = null,
+    val sampleError: String? = null,
 ) {
     val selected get() = roll.photos.firstOrNull { it.id == roll.selectedId }
     val busy get() = importing || exporting || sampling
@@ -38,6 +42,8 @@ class NegativeScanViewModel private constructor(application: Application, privat
     private val imageLock = Mutex()
     private var loadJob: Job? = null; private var previewJob: Job? = null; private var operation: Job? = null
     private var active = false; private var generation = 0L
+    private var sampleRequestSequence = 0L
+    private var sampleSuccessSequence = 0L
 
     fun activate() {
         active = true
@@ -59,7 +65,7 @@ class NegativeScanViewModel private constructor(application: Application, privat
                 mutable.update { it.copy(roll = roll, ready = true, loading = false) }
                 if (active) preview()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { mutable.update { it.copy(loading = false, error = failure.message ?: "The preserved negative roll could not be opened") } }
+            catch (failure: Exception) { mutable.update { it.copy(loading = false, error = failure.message ?: "无法打开已保存的底片卷") } }
         }
     }
     fun pause() {
@@ -80,7 +86,7 @@ class NegativeScanViewModel private constructor(application: Application, privat
         viewModelScope.launch {
             try { store.save(snapshot) }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { mutable.update { it.copy(error = failure.message ?: "Roll settings could not be saved; retry before leaving") } }
+            catch (failure: Exception) { mutable.update { it.copy(error = failure.message ?: "本卷设置未能保存，离开前请重试") } }
         }
     }
     fun select(id: String) {
@@ -97,7 +103,7 @@ class NegativeScanViewModel private constructor(application: Application, privat
         changed { it.copy(photos = it.photos.map { photo -> if (photo.id == selected.id) photo.copy(turns = (photo.turns + 1) % 4) else photo }) }
         commit(); preview()
     }
-    fun retry() { mutable.update { it.copy(error = null) }; if (!state.value.ready) activate() else { commit(); preview() } }
+    fun retry() { mutable.update { it.copy(error = null, sampleError = null) }; if (!state.value.ready) activate() else { commit(); preview() } }
     private fun preview() {
         previewJob?.cancel()
         val snapshot = state.value; val photo = snapshot.selected; val token = ++generation
@@ -123,14 +129,14 @@ class NegativeScanViewModel private constructor(application: Application, privat
                 else { result.first.recycle(); result.second?.recycle() }
                 ownedResult = null
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (generation == token) mutable.update { it.copy(loading = false, error = failure.message ?: "Preview could not be decoded") } }
+            catch (failure: Exception) { if (generation == token) mutable.update { it.copy(loading = false, error = failure.message ?: "无法加载预览，请重试") } }
             finally { ownedResult?.let { it.first.recycle(); it.second?.recycle() } }
         }
     }
     fun import(uris: List<Uri>) {
         if (!state.value.ready || state.value.busy || uris.isEmpty()) return
         val available = NEGATIVE_MAX_PHOTOS - state.value.roll.photos.size
-        if (uris.size > available) { mutable.update { it.copy(error = "A roll holds up to $NEGATIVE_MAX_PHOTOS captures; choose at most $available more") }; return }
+        if (uris.size > available) { mutable.update { it.copy(error = "每卷最多 $NEGATIVE_MAX_PHOTOS 张，本次最多还能导入 $available 张") }; return }
         previewJob?.cancel(); generation++
         mutable.update { it.copy(importing = true, error = null, message = null) }
         operation = viewModelScope.launch {
@@ -153,32 +159,65 @@ class NegativeScanViewModel private constructor(application: Application, privat
                     }
                     catch (failure: Exception) {
                         if (photo != null) { mutable.update { it.copy(roll = before) }; store.discardUnindexed(photo) }
-                        failures += (failure.message ?: "Capture import failed")
+                        failures += (failure.message ?: "底片导入失败")
                     }
                 }
             } finally {
-                mutable.update { it.copy(importing = false, message = "$imported capture(s) preserved", error = failures.takeIf { it.isNotEmpty() }?.joinToString("; ")?.take(500)) }
+                mutable.update { it.copy(importing = false, message = "已保留 $imported 张原始翻拍", error = failures.takeIf { it.isNotEmpty() }?.joinToString("; ")?.take(500)) }
                 if (active) preview()
             }
         }
     }
-    fun sample(touchX: Double, touchY: Double, width: Double, height: Double) {
+    /** A fresh arming request never reuses an earlier successful film-base event. */
+    fun beginSamplingSession(): Long? {
+        if (!state.value.ready || state.value.busy || state.value.selected == null) return null
+        val id = ++sampleRequestSequence
+        mutable.update { it.copy(sampleRequestId = id, sampleError = null, error = null) }
+        return id
+    }
+    fun cancelSamplingSession(requestId: Long) {
+        if (state.value.sampleRequestId != requestId) return
+        val id = ++sampleRequestSequence
+        if (state.value.sampling) operation?.cancel()
+        mutable.update { it.copy(sampleRequestId = id, sampleError = null) }
+    }
+    fun sample(touchX: Double, touchY: Double, width: Double, height: Double, expectedRequestId: Long? = null) {
         val snapshot = state.value; val photo = snapshot.selected ?: return
         if (snapshot.busy || snapshot.previewId != photo.id || snapshot.negative == null) return
+        if (expectedRequestId != null && expectedRequestId != snapshot.sampleRequestId) return
+        val requestId = snapshot.sampleRequestId.takeIf { it > 0 } ?: beginSamplingSession() ?: return
         val displayed = snapshot.negative
         val previewWidth = if (photo.turns % 2 == 0) displayed.width else displayed.height
         val previewHeight = if (photo.turns % 2 == 0) displayed.height else displayed.width
         val point = NegativeGeometry.capturePoint(touchX, touchY, width, height, photo.width, photo.height, previewWidth, previewHeight, photo.turns)
-        if (point == null) { mutable.update { it.copy(error = "Tap inside the negative image, on a clear unexposed border") }; return }
-        mutable.update { it.copy(sampling = true, error = null) }
+        if (point == null) { mutable.update { it.copy(sampleError = "请点图像内未曝光的片基，避开黑边和齿孔。") }; return }
+        mutable.update { it.copy(sampling = true, error = null, sampleError = null) }
         operation = viewModelScope.launch {
+            var applied = false
+            var succeeded = false
+            suspend fun restorePreviousBase() {
+                if (!applied || succeeded) return
+                withContext(NonCancellable) {
+                    changed { it.copy(settings = it.settings.copy(base = snapshot.roll.settings.base)) }
+                    try { saveCurrent() }
+                    catch (failure: Exception) { mutable.update { it.copy(error = "原片基恢复未能保存，请重试：${failure.message.orEmpty()}") } }
+                }
+            }
             try {
                 val base = withContext(worker) { imageLock.withLock { NegativeRaster.sample(store.source(photo), photo, point) } }
                 ensureActive()
-                changed { it.copy(settings = it.settings.copy(base = base)) }; saveCurrent()
-                mutable.update { it.copy(message = "Original-pixel film base sampled; settings apply to this roll") }
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { mutable.update { it.copy(error = failure.message ?: "Film base could not be sampled") } }
+                if (state.value.sampleRequestId != requestId || state.value.roll.selectedId != photo.id) return@launch
+                changed { it.copy(settings = it.settings.copy(base = base)) }; applied = true
+                saveCurrent(); ensureActive()
+                if (state.value.sampleRequestId != requestId) { restorePreviousBase(); return@launch }
+                succeeded = true
+                val event = NegativeSampleSuccess(++sampleSuccessSequence, requestId, photo.id)
+                mutable.update { it.copy(sampleSuccess = event, sampleError = null, message = "片基取样成功，已应用于本卷。") }
+            } catch (cancelled: CancellationException) { restorePreviousBase(); throw cancelled }
+            catch (failure: Exception) {
+                restorePreviousBase()
+                mutable.update { it.copy(sampleError = "片基取样未完成。请选择均匀透亮、未曝光的胶片区域，避开齿孔与反光。${failure.message?.let { reason -> "（$reason）" }.orEmpty()}") }
+            }
             finally { mutable.update { it.copy(sampling = false) }; if (active) preview() }
         }
     }
@@ -230,16 +269,16 @@ class NegativeScanViewModel private constructor(application: Application, privat
                         try { saveCurrent() }
                         catch (cancelled: CancellationException) { throw cancelled }
                         catch (failure: Exception) {
-                            mutable.update { it.copy(error = failure.message ?: "The saved output needs queue recovery") }
+                            mutable.update { it.copy(error = failure.message ?: "正片已保存，导出记录需要恢复") }
                             return@launch
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (failure: Exception) {
-                        updateJob(job.id) { it.copy(status = NegativeJobStatus.FAILED, pendingUri = null, error = failure.message ?: "Export failed") }; saveCurrent()
+                        updateJob(job.id) { it.copy(status = NegativeJobStatus.FAILED, pendingUri = null, error = failure.message ?: "导出失败") }; saveCurrent()
                     }
                     currentId = null
                 }
-                mutable.update { it.copy(message = "Export queue finished. Completed photographs are in Pictures / SpektraLab") }
+                mutable.update { it.copy(message = "导出队列已完成。正片已保存到本机 Pictures / SpektraLab。") }
             } catch (cancelled: CancellationException) {
                 withContext(NonCancellable) {
                     currentId?.let { id ->
@@ -249,15 +288,15 @@ class NegativeScanViewModel private constructor(application: Application, privat
                         else if (pending != null && exporter.isPublished(pending)) updateJob(id) { it.copy(status = NegativeJobStatus.COMPLETE, outputUri = pending.toString(), pendingUri = null) }
                         else { if (pending != null) exporter.removePending(pending); updateJob(id) { it.copy(status = NegativeJobStatus.WAITING, pendingUri = null) } }
                     }
-                    try { saveCurrent() } catch (failure: Exception) { mutable.update { it.copy(error = failure.message ?: "Queue recovery could not be saved") } }
+                    try { saveCurrent() } catch (failure: Exception) { mutable.update { it.copy(error = failure.message ?: "无法保存队列恢复记录") } }
                 }
-                mutable.update { it.copy(message = "Export paused. Resume keeps the saved source/settings snapshots") }
+                mutable.update { it.copy(message = "导出已暂停。继续时会使用每项任务原有的照片与设置快照。") }
             } catch (failure: Exception) {
                 currentId?.let { id ->
                     if (state.value.roll.jobs.first { it.id == id }.status == NegativeJobStatus.RUNNING)
                         updateJob(id) { it.copy(status = NegativeJobStatus.WAITING) }
                 }
-                mutable.update { it.copy(error = failure.message ?: "The export queue could not be saved") }
+                mutable.update { it.copy(error = failure.message ?: "无法保存导出队列") }
             }
             finally { mutable.update { it.copy(exporting = false) }; if (active) preview() }
         }

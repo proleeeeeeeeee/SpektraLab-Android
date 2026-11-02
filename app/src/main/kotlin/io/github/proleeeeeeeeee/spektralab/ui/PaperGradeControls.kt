@@ -18,23 +18,16 @@ import io.github.proleeeeeeeeee.spektralab.core.PaperGrade
 internal fun PaperGradeControls(recipe: EditRecipe, onGrade: (PaperGrade) -> Unit) {
     if (!PaperGrade.supports(recipe)) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("paper-grade-controls")) {
-        Text("BW paper contrast · Grade ${recipe.paperGrade.label}", style = MaterialTheme.typography.titleSmall,
+        Text("黑白相纸反差号  ${recipe.paperGrade.label}", style = MaterialTheme.typography.titleSmall,
             color = AccentColor, modifier = Modifier.testTag("paper-grade-current"))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PaperGrade.entries.forEach { grade ->
-                FilterChip(
-                    selected = recipe.paperGrade == grade,
-                    onClick = { onGrade(grade) },
-                    label = { Text(grade.label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AccentColor, selectedLabelColor = CanvasColor,
-                    ),
-                    modifier = Modifier.widthIn(min = 48.dp).heightIn(min = 48.dp)
-                        .testTag("paper-grade-${grade.label}")
-                        .semantics { contentDescription = "BW paper grade ${grade.label}" },
-                )
+                FilterChip(selected = recipe.paperGrade == grade, onClick = { onGrade(grade) }, label = { Text(grade.label) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AccentColor, selectedLabelColor = CanvasColor),
+                    modifier = Modifier.widthIn(min = 48.dp).heightIn(min = 48.dp).testTag("paper-grade-${grade.label}")
+                        .semantics { contentDescription = "黑白相纸反差号 ${grade.label}" })
             }
         }
-        Text("00 softer · 5 harder. Separate from scan Contrast.", fontSize = 11.sp, color = MutedColor)
+        Text("00 较柔和，5 较硬朗；与扫描对比度独立。", fontSize = 11.sp, color = MutedColor)
     }
 }

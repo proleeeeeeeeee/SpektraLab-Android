@@ -38,24 +38,42 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
     private var generation=0L
     private var active=false
 
-    fun activate(project: PhotoProject) {
-        val previous=state.value
-        if (previous.project==project && previous.layoutReady) { resume();return }
-        pause();active=true
-        val same=previous.project?.id==project.id && previous.layoutReady
-        val cached=SavedLightTable(previous.revision,previous.layout)
-        val initial=(if (same) cached.layout else LightTableLayout()).reconcile(project.photos.map { it.id })
-        // Clear the old project's pictures before asynchronous layout loading.
-        mutableState.value=LightTableState(project=project,layout=initial,loading=project.photos.isNotEmpty())
-        val token=++generation
-        activationJob=viewModelScope.launch {
-            val saved=if (same) cached else try { store.load(project.id) }
+    /** Read culling metadata without allocating a renderer or board/detail bitmaps. */
+    fun bind(project: PhotoProject) = attach(project, renderBoard = false)
+
+    fun activate(project: PhotoProject) = attach(project, renderBoard = true)
+
+    private fun attach(project: PhotoProject, renderBoard: Boolean) {
+        val previous = state.value
+        if (previous.project == project && previous.layoutReady) {
+            if (renderBoard) resume() else if (active) pause()
+            return
+        }
+        pause()
+        active = renderBoard
+        val same = previous.project?.id == project.id && previous.layoutReady
+        val cached = SavedLightTable(previous.revision, previous.layout)
+        val initial = (if (same) cached.layout else LightTableLayout()).reconcile(project.photos.map { it.id })
+        mutableState.value = LightTableState(project = project, layout = initial, loading = true)
+        val token = ++generation
+        activationJob = viewModelScope.launch {
+            val saved = if (same) cached else try { store.load(project.id) }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { SavedLightTable() }
-            if (generation!=token || !active) return@launch
-            val layout=saved.layout.reconcile(project.photos.map { it.id })
-            mutableState.value=LightTableState(project=project,layout=layout,layoutReady=true,revision=saved.revision,savedRevision=saved.revision)
-            loadPage()
+                catch (failure: Exception) {
+                    if (generation == token) mutableState.update {
+                        it.copy(loading = false, error = "无法读取项目标记，请重试。已有布局未被覆盖。")
+                    }
+                    return@launch
+                }
+            if (generation != token) return@launch
+            val layout = saved.layout.reconcile(project.photos.map { it.id })
+            // Reconciliation is a new metadata state. An older in-flight save must not
+            // replace positions added/removed by a new project snapshot at the same revision.
+            val revision = saved.revision + if (layout != saved.layout) 1 else 0
+            mutableState.value = LightTableState(project = project, layout = layout, layoutReady = true,
+                revision = revision, savedRevision = saved.revision)
+            if (layout != saved.layout) commit()
+            if (active) loadPage()
         }
     }
     fun resume() {
@@ -72,8 +90,12 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
         mutableState.update { it.copy(images=emptyMap(),detail=null,detailId=null,loading=false) }
     }
     private fun renderer(): FilmEngine = engine ?: FilmEngine(getApplication()).also { engine=it }
-    fun retry() { if (active) loadPage() }
+    fun retry() {
+        val project = state.value.project ?: return
+        if (!state.value.layoutReady) attach(project, active) else if (active) loadPage()
+    }
     private fun loadPage() {
+        if (!active) return
         loadJob?.cancel();detailJob?.cancel();engine?.cancel()
         val snapshot=state.value;val token=++generation
         mutableState.update { it.copy(images=emptyMap(),detail=null,detailId=null,loading=snapshot.pagePhotos.isNotEmpty(),failed=emptySet(),error=null) }
@@ -92,7 +114,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
                     catch (_: Exception) { if (generation==token) mutableState.update { it.copy(failed=it.failed+photo.id) } }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (generation==token) mutableState.update { it.copy(error=failure.message ?: "Previews could not be developed") } }
+            catch (failure: Exception) { if (generation==token) mutableState.update { it.copy(error=failure.message ?: "无法生成预览，请重试") } }
             finally { if (generation==token) mutableState.update { it.copy(loading=false) } }
         }
     }
@@ -160,7 +182,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
                 store.save(id,snapshot.layout,snapshot.revision)
                 if (state.value.project?.id==id) mutableState.update { it.copy(savedRevision=maxOf(it.savedRevision,snapshot.revision)) }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (state.value.project?.id==id) mutableState.update { it.copy(error=failure.message ?: "Layout could not be saved") } }
+            catch (failure: Exception) { if (state.value.project?.id==id) mutableState.update { it.copy(error=failure.message ?: "布局尚未保存，请重试") } }
         }
     }
     override fun onCleared() { engine?.close();super.onCleared() }

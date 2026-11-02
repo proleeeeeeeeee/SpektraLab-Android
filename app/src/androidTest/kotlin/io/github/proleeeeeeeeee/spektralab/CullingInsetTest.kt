@@ -37,23 +37,23 @@ class CullingInsetTest {
         val variant=InstrumentationRegistry.getArguments().getString("insetVariant") ?: "default"
         val evidence=File(compose.activity.filesDir,"stage1-evidence").apply { mkdirs() }
         val report=org.json.JSONArray()
-        fun checkAndCapture(label: String,text: String) {
-            val node=compose.onNodeWithText(text).performScrollTo().assertIsDisplayed()
+        fun checkAndCapture(label: String,tag: String) {
+            val node=compose.onNodeWithTag(tag).assertIsDisplayed()
             compose.waitForIdle();instrumentation.uiAutomation.waitForIdle(200,5_000)
             android.os.SystemClock.sleep(250)
             val metrics=compose.activity.windowManager.currentWindowMetrics
             val navigation=metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars())
             val inset=navigation.bottom
             val rect=node.fetchSemanticsNode().layoutInfo.coordinates!!.boundsInWindow()
-            assertTrue("$variant $text is under navigation: $rect, height=${metrics.bounds.height()}, inset=$inset",rect.bottom<=metrics.bounds.height()-inset+1)
-            assertTrue("$variant $text overlaps side navigation: $rect",rect.left>=navigation.left-1 && rect.right<=metrics.bounds.width()-navigation.right+1)
+            assertTrue("$variant $tag is under navigation: $rect, height=${metrics.bounds.height()}, inset=$inset",rect.bottom<=metrics.bounds.height()-inset+1)
+            assertTrue("$variant $tag overlaps side navigation: $rect",rect.left>=navigation.left-1 && rect.right<=metrics.bounds.width()-navigation.right+1)
             val image=instrumentation.uiAutomation.takeScreenshot() ?: error("No display screenshot")
             File(evidence,"inset-$variant-$label.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG,100,it) };image.recycle()
-            report.put(org.json.JSONObject().put("action",text).put("bottom",rect.bottom).put("windowHeight",metrics.bounds.height()).put("navigationBottom",inset).put("navigationLeft",navigation.left).put("navigationRight",navigation.right))
+            report.put(org.json.JSONObject().put("action",tag).put("bottom",rect.bottom).put("windowHeight",metrics.bounds.height()).put("navigationBottom",inset).put("navigationLeft",navigation.left).put("navigationRight",navigation.right))
             node.performClick()
         }
-        compose.onNodeWithText("Rate / mark").performClick();checkAndCapture("mark","Done marking")
-        compose.onNodeWithTag("review-filter").performClick();checkAndCapture("filter","Apply filter")
+        compose.onNodeWithTag("review-mark").performClick();checkAndCapture("mark","review-done")
+        compose.onNodeWithTag("review-filter").performClick();checkAndCapture("filter","filter-apply")
         File(evidence,"inset-$variant.json").writeText(report.toString(2))
     }
 }

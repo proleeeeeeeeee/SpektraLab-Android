@@ -99,12 +99,11 @@ class NegativeScanInteractionTest {
             compose.waitUntil(20_000) { !model.state.value.importing && model.state.value.roll.photos.size == 2 && model.state.value.negative != null }
             assertNull(model.state.value.error)
             val photos = model.state.value.roll.photos
-            compose.onNodeWithTag("negative-import").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("negative-continue").performScrollTo().performClick()
+            compose.onNodeWithTag("negative-roll-label").performScrollTo().assertIsDisplayed()
             compose.onNodeWithTag("negative-photo-${photos[0].id}").performScrollTo().assertIsDisplayed().performClick()
             compose.waitUntil(20_000) { model.state.value.previewId == photos[0].id && model.state.value.negative != null }
-            // First reveal the vertical parent; performScrollTo on the chip itself only scrolls its horizontal row.
-            compose.onNodeWithText("Black-and-white negative").performScrollTo().assertIsDisplayed()
-            compose.onNodeWithTag("negative-sample-mode").performScrollTo().assertIsDisplayed().performClick()
+            compose.onNodeWithTag("negative-step-sample").assertExists()
             val viewport = compose.onNodeWithTag("negative-viewport").performScrollTo()
             val size = viewport.fetchSemanticsNode().boundsInRoot.size
             val scale = min(size.width / 200f, size.height / 100f)
@@ -113,45 +112,43 @@ class NegativeScanInteractionTest {
             val sampled = model.state.value.roll.settings.base!!
             assertEquals(knownBase.red, sampled.red, 1e-5); assertEquals(knownBase.green, sampled.green, 1e-5); assertEquals(knownBase.blue, sampled.blue, 1e-5)
             report.put("sample", Json.encodeToString(sampled)).put("sampleMethod", "Pointer tap at actual viewport fit position of original pixel (8,50)")
-            // First reveal the vertical parent; performScrollTo on the chip itself only scrolls its horizontal row.
-            compose.onNodeWithText("Black-and-white negative").performScrollTo().assertIsDisplayed()
-            compose.onNodeWithTag("negative-sample-mode").performScrollTo().assertIsDisplayed().performClick()
-            compose.onNodeWithTag("negative-sample-mode").assertIsNotSelected()
+            compose.onNodeWithTag("negative-step-sample").assertDoesNotExist()
+            compose.onNodeWithTag("negative-step-preview").assertExists()
             val before = model.state.value.positive!!.getPixel(60, 40)
             compose.onNodeWithTag("negative-viewport").performScrollTo()
-            compose.onNodeWithContentDescription("Creative positive preview").assertIsDisplayed()
+            compose.onNodeWithContentDescription("创意反转正片预览").assertIsDisplayed()
             screenshot(evidence, "01-sampled-positive")
 
-            dragSlider("Positive exposure (EV)", .60f)
-            dragSlider("Warm / cool balance (EV)", .62f)
-            dragSlider("Green / magenta balance (EV)", .40f)
+            dragSlider("曝光（EV）", .60f)
+            compose.onNodeWithTag("negative-tool-balance").performScrollTo().performClick()
+            dragSlider("色温（冷暖）", .62f)
+            dragSlider("色调（绿／洋红）", .40f)
             awaitPreview(model, photos[0].id)
             val graded = model.state.value.roll.settings
             assertTrue("Exposure slider must change the roll", graded.exposure > .1)
             assertTrue("Temperature slider must change the roll", graded.temperature > .1)
             assertTrue("Tint slider must change the roll", graded.tint < -.1)
             assertNotEquals("UI grade must change actual preview pixels", before, model.state.value.positive!!.getPixel(60, 40))
-            compose.onNodeWithText("Black-and-white negative").performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText("Rotate 90°").performScrollTo().assertIsDisplayed().performClick()
+            compose.onNodeWithTag("negative-rotate").performScrollTo().assertIsDisplayed().performClick()
             awaitPreview(model, photos[0].id)
             assertEquals(1, model.state.value.roll.photos[0].turns)
             assertEquals(100, model.state.value.positive!!.width); assertEquals(200, model.state.value.positive!!.height)
             compose.onNodeWithTag("negative-viewport").performScrollTo()
-            compose.onNodeWithTag("negative-sample-mode").assertIsNotSelected()
-            compose.onNodeWithContentDescription("Creative positive preview").assertIsDisplayed()
+            compose.onNodeWithTag("negative-step-sample").assertDoesNotExist()
+            compose.onNodeWithContentDescription("创意反转正片预览").assertIsDisplayed()
             screenshot(evidence, "02-adjusted-rotated-positive")
 
-            compose.onNodeWithTag("negative-import").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag("negative-roll-label").performScrollTo().assertIsDisplayed()
             compose.onNodeWithTag("negative-photo-${photos[1].id}").performScrollTo().assertIsDisplayed().performClick()
             awaitPreview(model, photos[1].id)
             assertEquals(graded, model.state.value.roll.settings)
             assertEquals(200, model.state.value.positive!!.width)
             compose.onNodeWithTag("negative-viewport").performScrollTo()
             screenshot(evidence, "03-second-capture-shared-grade")
-            compose.onNodeWithText("PNG", substring = false).performScrollTo().performClick()
-            compose.onNodeWithText("Export all 2 captures with current roll settings").performScrollTo()
-            compose.onAllNodes(isToggleable()).assertCountEquals(2)[1].performScrollTo().performClick()
-            compose.onNodeWithText("Save roll positives").performScrollTo().performClick()
+            compose.onNodeWithTag("negative-export").performScrollTo().performClick()
+            compose.onNodeWithTag("negative-export-format-PNG").performScrollTo().performClick()
+            compose.onNodeWithTag("negative-export-all").performScrollTo().performClick()
+            compose.onNodeWithTag("negative-export-confirm").assertIsDisplayed().performClick()
             compose.waitUntil(30_000) { !model.state.value.exporting && model.state.value.roll.jobs.size == 2 && model.state.value.roll.jobs.all { it.status == NegativeJobStatus.COMPLETE } }
             assertNull(model.state.value.error)
             val jobs = model.state.value.roll.jobs
@@ -179,7 +176,7 @@ class NegativeScanInteractionTest {
                 } finally { decoded.recycle() }
             }
             assertEquals(jobs, store.load().jobs)
-            compose.onNodeWithText("Export queue: 2 saved · 0 pending · 0 failed").performScrollTo()
+            compose.onNodeWithText("导出队列：2 已保存，0 待处理，0 失败").performScrollTo()
             screenshot(evidence, "04-roll-png-export-complete")
             report.put("settings", Json.encodeToString(graded)).put("readback", checks).put("status", "PASS")
                 .put("coverage", "Pointer film-base sample; touch exposure/temperature/tint sliders; rotate; switch captures; PNG chip; all-roll checkbox; export button; output pixel/dimension and input SHA-256 checks")

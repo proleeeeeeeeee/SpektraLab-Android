@@ -79,10 +79,10 @@ class PaperGradeWorkflowTest {
                 model().finishInteraction()
             }
 
-            clickReachable(compose.onNodeWithText("Looks", useUnmergedTree = true))
-            clickReachable(compose.onNodeWithText("Film"))
+            clickReachable(compose.onNodeWithTag("open-material-browser"))
+            clickReachable(compose.onNodeWithTag("material-tab-film"))
             chooseFilm(PaperGrade.FITTED_FILM_ID)
-            clickReachable(compose.onNodeWithText("Paper"))
+            clickReachable(compose.onNodeWithTag("material-tab-paper"))
             awaitLatestGrade(PaperGrade.GRADE_2, importedId)
             compose.onNodeWithTag("paper-grade-2").assertIsSelected()
             assertSmallPortraitHasScrollableMaterialsAndUsablePhoto()
@@ -107,10 +107,10 @@ class PaperGradeWorkflowTest {
             verifyColdPreviewAndSample(privateFile, "rapid-final-four")
 
             // The control belongs to Paper; switching the film must retain its stored grade.
-            clickReachable(compose.onNodeWithText("Film"))
+            clickReachable(compose.onNodeWithTag("material-tab-film"))
             compose.onNodeWithTag("paper-grade-controls").assertDoesNotExist()
             chooseFilm("ilford_hp5_plus_400")
-            clickReachable(compose.onNodeWithText("Paper"))
+            clickReachable(compose.onNodeWithTag("material-tab-paper"))
             awaitLatestGrade(PaperGrade.GRADE_4, importedId)
             assertEquals("ilford_hp5_plus_400", model().state.value.recipe.filmId)
             assertOnlyGradeSelected(PaperGrade.GRADE_4)
@@ -122,14 +122,16 @@ class PaperGradeWorkflowTest {
             assertEquals(savedRecipe, fromDisk.recipe)
             assertTrue(fromDisk.revision >= savedRevision)
 
-            clickReachable(compose.onNodeWithContentDescription("Back to photographs", useUnmergedTree = true))
+            clickReachable(compose.onNodeWithTag("material-browser-done"))
+            clickReachable(compose.onNodeWithTag("editor-back"))
             compose.waitUntil(30_000) { !model().state.value.showEditor && samples().state.value.images.isEmpty() }
             compose.waitUntil(30_000) {
                 compose.onAllNodesWithContentDescription(displayName).fetchSemanticsNodes().isNotEmpty()
             }
             clickReachable(compose.onNodeWithContentDescription(displayName))
             compose.waitUntil(60_000) { model().state.value.showEditor && model().state.value.photo?.id == importedId }
-            clickReachable(compose.onNodeWithText("Paper"))
+            clickReachable(compose.onNodeWithTag("open-material-browser"))
+            clickReachable(compose.onNodeWithTag("material-tab-paper"))
             awaitLatestGrade(PaperGrade.GRADE_4, importedId)
             assertEquals(savedRecipe, model().state.value.recipe)
             assertOnlyGradeSelected(PaperGrade.GRADE_4)
@@ -141,7 +143,7 @@ class PaperGradeWorkflowTest {
             awaitLatestGrade(PaperGrade.GRADE_4, importedId)
             compose.activityRule.scenario.recreate()
             useSmallPortraitWindow()
-            clickReachable(compose.onNodeWithText("Paper"))
+            clickReachable(compose.onNodeWithTag("material-tab-paper"))
             awaitLatestGrade(PaperGrade.GRADE_4, importedId)
             assertOnlyGradeSelected(PaperGrade.GRADE_4)
             assertEquals(savedRecipe, model().state.value.recipe)
@@ -258,7 +260,7 @@ class PaperGradeWorkflowTest {
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         assertTrue("Small portrait width was not applied: $root", root.width <= 340 * density)
         assertTrue("Small portrait height was not applied: $root", root.height <= 580 * density && root.height > root.width)
-        val photo = compose.onNodeWithContentDescription("Processed photograph").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val photo = compose.onNodeWithTag("material-browser-preview").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertTrue("Paper controls collapsed the usable photo area: $photo", photo.width >= 120 * density && photo.height >= 96 * density)
         val scrollParents = compose.onAllNodes(hasScrollAction() and hasAnyDescendant(hasTestTag("paper-grade-5")),
             useUnmergedTree = true).fetchSemanticsNodes()

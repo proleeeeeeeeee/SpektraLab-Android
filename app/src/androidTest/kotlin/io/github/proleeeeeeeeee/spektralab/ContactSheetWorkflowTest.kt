@@ -76,7 +76,7 @@ class ContactSheetWorkflowTest {
                 compose.runOnIdle { model.selectFilm(film) }
                 compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.library.active.photos.first { it.id==ids[index] }.recipe==model.state.value.recipe }
             }
-            compose.onNodeWithContentDescription("Back to photographs").performClick();compose.onNodeWithText("Light table").performClick()
+            compose.onNodeWithTag("editor-back").performClick();compose.onNodeWithTag("workspace-view-table").performClick()
             compose.waitUntil(180_000) { light.state.value.layoutReady && !light.state.value.loading && light.state.value.images.size==8 }
             compose.runOnIdle {
                 light.review(ids[0],PhotoReview(5,ReviewFlag.KEEP,ReviewColor.RED));light.pick(ids[0])
@@ -90,14 +90,14 @@ class ContactSheetWorkflowTest {
                 val all=current.photos.mapIndexed { index,p -> ContactSheetEntry(p.id,index+1,p.displayName,p.recipe,light.state.value.layout.reviews[p.id] ?: PhotoReview()) }
                 return ContactSheetSnapshot.selected(current.name,all,scope,settings)
             }
-            fun options() { compose.onNodeWithText("Export...").performClick();compose.onNodeWithText("Contact sheet...").performClick();compose.onNodeWithText("Contact sheet").assertIsDisplayed() }
-            fun save() { compose.onNodeWithTag("sheet-save").performScrollTo().performClick() }
+            fun options() { compose.onNodeWithTag("review-export").performClick();compose.onNodeWithTag("review-contact-sheet").performClick();compose.onNodeWithTag("export-title").assertTextEquals("接触印样").assertIsDisplayed() }
+            fun save() { compose.onNodeWithTag("sheet-save").assertIsDisplayed().performClick() }
             fun finished(): List<Uri> {
                 compose.waitUntil(300_000) { !sheet.state.value.busy && (sheet.state.value.outputs.isNotEmpty() || sheet.state.value.error!=null) }
                 assertNull(sheet.state.value.error);val result=sheet.state.value.outputs;assertTrue(result.isNotEmpty());outputs+=result
-                compose.onNodeWithText("Contact sheet saved").assertIsDisplayed();return result
+                compose.onNodeWithTag("sheet-saved-title").assertIsDisplayed();return result
             }
-            fun dismiss() { compose.onNodeWithText("Continue selecting").performClick();compose.waitUntil(120_000) { !light.state.value.loading && light.state.value.images.isNotEmpty() } }
+            fun dismiss() { compose.onNodeWithTag("sheet-dismiss").performClick();compose.waitUntil(120_000) { !light.state.value.loading && light.state.value.images.isNotEmpty() } }
             fun verify(uris: List<Uri>,snapshot: ContactSheetSnapshot,label: String,pdf: Boolean) = runBlocking {
                 val layout=ContactSheetLayout(snapshot.settings);val plans=layout.pages(snapshot.entries.size)
                 val engine=FilmEngine(context);engine.initialize();var pageIndex=0
@@ -168,13 +168,13 @@ class ContactSheetWorkflowTest {
             val frozen=snapshot(ContactSheetSettings())
             options();compose.onNodeWithTag("sheet-scope-Picked").assertIsDisplayed()
             compose.runOnIdle { light.rate(ids[0],1);light.pick(ids[2]) }
-            compose.onNodeWithText("Picked (2)").assertIsDisplayed()
+            compose.onNodeWithText("入选（2）").assertIsDisplayed()
             compose.onNodeWithTag("sheet-scope-All photographs").performClick();capture("real-pdf-options");save()
             val pdf=finished();assertEquals(1,pdf.size);assertTrue(light.state.value.images.isEmpty());capture("real-pdf-saved")
             verify(pdf,frozen,"real-pdf",true);dismiss()
             val landscape=snapshot(ContactSheetSettings(SheetOrientation.LANDSCAPE,2,2))
             options();compose.onNodeWithTag("sheet-scope-All photographs").performClick()
-            compose.onNodeWithTag("sheet-format-JPEG").performScrollTo().performClick();compose.onNodeWithTag("sheet-orientation-LANDSCAPE").performClick()
+            compose.onNodeWithTag("sheet-format-JPEG").performScrollTo().performClick();compose.onNodeWithTag("sheet-layout-toggle").performScrollTo().performClick();compose.onNodeWithTag("sheet-orientation-LANDSCAPE").performScrollTo().performClick()
             compose.onNodeWithTag("sheet-columns-2").performScrollTo().performClick();compose.onNodeWithTag("sheet-rows-2").performScrollTo().performClick();save()
             val jpg=finished();assertEquals(4,jpg.size);verify(jpg,landscape,"real-jpg-landscape",false);dismiss()
             compose.runOnIdle { light.rate(ids[0],5);light.rate(ids[8],5);light.filter(ReviewFilter(minimumRating=4,flag=ReviewFlag.KEEP)) }
@@ -185,12 +185,12 @@ class ContactSheetWorkflowTest {
             // Explicit UI cancellation and lifecycle cancellation must retain a retryable immutable request.
             checkpoint("begin explicit cancellation")
             options();compose.onNodeWithTag("sheet-scope-All photographs").performClick();save()
-            compose.onNodeWithText("Cancel contact sheet").performClick()
+            compose.onNodeWithTag("sheet-cancel").performClick()
             compose.waitUntil(120_000) { !sheet.state.value.busy && sheet.state.value.error!=null }
             assertTrue(sheet.state.value.error!!.startsWith("Contact-sheet export was cancelled"))
             assertTrue(sheet.state.value.outputs.isEmpty());assertTrue(File(context.cacheDir,"contact-sheets").listFiles().orEmpty().isEmpty())
             assertEquals(ids,ContactSheetJournal(context).load()!!.snapshot.entries.map { it.photoId });capture("real-cancelled")
-            compose.onNodeWithText("Discard sheet request").performClick();compose.waitUntil(30_000) { sheet.state.value.ready && sheet.state.value.error==null }
+            compose.onNodeWithTag("sheet-discard").performClick();compose.waitUntil(30_000) { sheet.state.value.ready && sheet.state.value.error==null }
             checkpoint("begin background and Activity recreation")
             options();compose.onNodeWithTag("sheet-scope-All photographs").performClick();save()
             compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
@@ -198,14 +198,14 @@ class ContactSheetWorkflowTest {
             assertTrue(File(context.cacheDir,"contact-sheets").listFiles().orEmpty().isEmpty())
             val interrupted=ContactSheetJournal(context).load()!!
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED);compose.activityRule.scenario.recreate()
-            compose.onNodeWithText("Retry contact sheet").assertIsDisplayed().performClick()
+            compose.onNodeWithTag("sheet-retry").assertIsDisplayed().performClick()
             val recovered=finished();verify(recovered,interrupted.snapshot,"real-background-retry",true);dismiss()
             checkpoint("begin damaged-source retry")
             damaged=sources.source(project.photos.first());backup=damaged!!.readBytes();damaged!!.writeBytes(byteArrayOf(0,1,2,3))
             options();compose.onNodeWithTag("sheet-scope-All photographs").performClick();save()
             compose.waitUntil(120_000) { !sheet.state.value.busy && sheet.state.value.error!=null }
             assertTrue(sheet.state.value.outputs.isEmpty());capture("real-source-failure")
-            damaged!!.writeBytes(backup!!);compose.onNodeWithText("Retry contact sheet").performClick()
+            damaged!!.writeBytes(backup!!);compose.onNodeWithTag("sheet-retry").performClick()
             val retried=finished();assertEquals(1,retried.size);outputs+=retried
             verify(retried,snapshot(ContactSheetSettings()),"real-source-retry",true);dismiss()
             for (photo in project.photos) assertEquals("Original must remain unchanged",originals[photo.id],hash(sources.source(photo)))

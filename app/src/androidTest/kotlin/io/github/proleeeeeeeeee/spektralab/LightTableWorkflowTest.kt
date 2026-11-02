@@ -43,12 +43,12 @@ class LightTableWorkflowTest {
         val name="Empty light table ${System.nanoTime()}"
         compose.runOnIdle { model.createProject(name);model.showLibrary() }
         compose.waitUntil(120_000) { model.state.value.library.active.name==name }
-        compose.onNodeWithText("Light table").performClick()
-        compose.onNodeWithText("Your light table is empty").assertIsDisplayed()
-        compose.onNodeWithText("Import photos").assertIsEnabled()
+        compose.onNodeWithTag("workspace-view-table").performClick()
+        compose.onNodeWithText("灯箱里还没有照片").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-import").assertIsEnabled()
         screenshot("empty")
-        compose.onNodeWithContentDescription("Back to photographs").performClick()
-        compose.onNodeWithText("Light table").assertIsDisplayed()
+        compose.onNodeWithTag("workspace-view-grid").performClick()
+        compose.onNodeWithTag("workspace-view-table").assertIsDisplayed()
         compose.runOnIdle { model.deleteProject() }
         compose.waitUntil(120_000) { model.state.value.library.active.name!=name }
     }
@@ -88,7 +88,7 @@ class LightTableWorkflowTest {
             compose.waitUntil(180_000) { !model.state.value.importing && model.state.value.library.active.photos.size==9 }
             val project=model.state.value.library.active
             compose.runOnIdle { model.showLibrary() }
-            compose.onNodeWithText("Light table").performClick()
+            compose.onNodeWithTag("workspace-view-table").performClick()
             fun waitPage(count: Int) {
                 compose.waitUntil(180_000) { val s=light.state.value
                     s.project?.id==project.id && !s.loading && (s.images.size==count || s.failed.isNotEmpty() || s.error!=null) }
@@ -106,14 +106,21 @@ class LightTableWorkflowTest {
             val dragged=light.state.value.layout.placements.first { it.photoId==id }
             assertTrue("Film drag must update its normalized position",dragged.x>before.x+.03)
             assertEquals(id,light.state.value.layout.placements.last().photoId)
-            compose.onNodeWithContentDescription("Rotate selected film").performClick()
+            compose.onNodeWithContentDescription("旋转当前胶片").performClick()
             assertEquals(dragged.rotated(15.0).rotation,light.state.value.layout.placements.first { it.photoId==id }.rotation,0.0)
-            compose.onNodeWithContentDescription("Backlight brightness").performSemanticsAction(SemanticsActions.SetProgress) { it(.31f) }
+            val controls = compose.onNodeWithTag("table-controls")
+            fun openControls() { controls.performClick() }
+            fun closeControls() { compose.onNodeWithTag("table-controls-done").performClick() }
+            openControls()
+            compose.onNodeWithContentDescription("灯箱背光亮度").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.31f) }
             assertEquals(.31,light.state.value.layout.brightness,.005)
-            compose.onNodeWithContentDescription("Backlight").assertIsOn().performClick()
-            assertFalse(light.state.value.layout.lightOn);screenshot("lamp-off")
-            compose.onNodeWithContentDescription("Backlight").performClick()
-            compose.onNodeWithContentDescription("Backlight brightness").performSemanticsAction(SemanticsActions.SetProgress) { it(.9f) }
+            compose.onNodeWithTag("table-light-switch").performScrollTo().assertIsOn().performClick()
+            assertFalse(light.state.value.layout.lightOn)
+            closeControls(); screenshot("lamp-off")
+            compose.onNodeWithTag("table-light").performClick()
+            openControls()
+            compose.onNodeWithContentDescription("灯箱背光亮度").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.9f) }
+            closeControls()
             val posesBeforeLens=light.state.value.layout.placements
             val lensBefore=light.state.value.layout
             val target=posesBeforeLens.first { it.photoId==id }
@@ -138,34 +145,34 @@ class LightTableWorkflowTest {
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
             waitPage(8);assertEquals(remembered,light.state.value.layout)
             compose.activityRule.scenario.recreate()
-            compose.onNodeWithText("Light table").assertIsDisplayed()
+            compose.onNodeWithTag("workspace-view-table").assertIsDisplayed()
             waitPage(8);assertEquals(remembered,light.state.value.layout)
             repeat(2) {
-                compose.onNodeWithContentDescription("Next light table page").performClick();waitPage(1)
+                compose.onNodeWithTag("table-next").performClick();waitPage(1)
                 assertEquals(project.photos.last().id,light.state.value.images.keys.single())
-                compose.onNodeWithContentDescription("Previous light table page").performClick();waitPage(8)
+                compose.onNodeWithTag("table-previous").performClick();waitPage(8)
             }
-            compose.onNodeWithContentDescription("Next light table page").performClick();waitPage(1)
+            compose.onNodeWithTag("table-next").performClick();waitPage(1)
             privateFile=PhotoStore(context).source(project.photos.last());backup=privateFile!!.readBytes()
             privateFile!!.writeBytes(byteArrayOf(0,1,2,3))
             compose.runOnIdle { light.retry() }
             compose.waitUntil(120_000) { !light.state.value.loading && light.state.value.failed.isNotEmpty() }
             assertTrue(light.state.value.images.isEmpty())
             privateFile!!.writeBytes(backup!!)
-            compose.onNodeWithText("Retry previews").performClick();waitPage(1)
+            openControls(); compose.onNodeWithText("重试预览").performScrollTo().performClick(); waitPage(1); closeControls()
             privateFile=null;backup=null
-            compose.onNodeWithContentDescription("Previous light table page").performClick();waitPage(8)
-            if (light.state.value.layout.loupeEnabled) compose.onNodeWithText("Loupe").performClick()
+            compose.onNodeWithTag("table-previous").performClick();waitPage(8)
+            if (light.state.value.layout.loupeEnabled) compose.onNodeWithTag("table-loupe").performClick()
             val pose=light.state.value.layout.placements.first { it.photoId==id };val currentSize=bounds()
             val retained=light.state.value.layout.placements
             board.performTouchInput { doubleClick(Offset((pose.x*currentSize.width).toFloat(),(pose.y*currentSize.height).toFloat())) }
             compose.waitUntil(120_000) { model.state.value.showEditor && model.state.value.photo?.id==id }
-            compose.onNodeWithContentDescription("Back to light table").assertIsDisplayed()
+            compose.onNodeWithTag("editor-back").assertIsDisplayed()
             assertTrue(light.state.value.images.isEmpty())
             compose.runOnIdle { model.selectFilm("kodak_portra_400") }
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.preview!=null }
             assertEquals("kodak_portra_400",model.state.value.recipe.filmId)
-            compose.onNodeWithContentDescription("Back to light table").performClick();waitPage(8)
+            compose.onNodeWithTag("editor-back").performClick();waitPage(8)
             assertEquals(retained,light.state.value.layout.placements)
             screenshot("returned-from-editor")
             val report=JSONObject().put("photos",9).put("pageSize",8).put("boardBitmapBytes",imageBytes)
@@ -176,8 +183,8 @@ class LightTableWorkflowTest {
             val evidence=File(context.filesDir,"light-table-evidence").apply { mkdirs() }
             File(evidence,"workflow.json").writeText(report.toString(2))
             android.util.Log.i("LightTableEvidence",report.toString())
-            compose.onNodeWithContentDescription("Back to photographs").performClick()
-            compose.onNodeWithText("Light table").assertIsDisplayed()
+            compose.onNodeWithTag("workspace-view-grid").performClick()
+            compose.onNodeWithTag("workspace-view-table").assertIsDisplayed()
         } finally {
             if (privateFile!=null && backup!=null) privateFile!!.writeBytes(backup!!)
             uris.forEach { resolver.delete(it,null,null) }

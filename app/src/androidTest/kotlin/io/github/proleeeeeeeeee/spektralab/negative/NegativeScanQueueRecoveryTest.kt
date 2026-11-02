@@ -10,7 +10,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
-import androidx.compose.material3.MaterialTheme
+import io.github.proleeeeeeeeee.spektralab.ui.SpektraTheme
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -82,11 +82,12 @@ class NegativeScanQueueRecoveryTest {
             repeat(2) { fixtures += fixture(prefix, it) }
             val originalBytes = fixtures.map { uri -> context.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
             val originalHashes = originalBytes.map(::sha)
-            compose.setContent { MaterialTheme { NegativeScanScreen(onBack = {}, model = model) } }
+            compose.setContent { SpektraTheme { NegativeScanScreen(onBack = {}, model = model) } }
             compose.waitUntil(10_000) { model.state.value.ready }
             compose.runOnIdle { model.import(fixtures) }
             compose.waitUntil(20_000) { model.state.value.roll.photos.size == 2 && !model.state.value.importing && model.state.value.negative != null }
             val photos = model.state.value.roll.photos
+            compose.onNodeWithTag("negative-continue").performScrollTo().performClick()
             // The selected second image's clear border maps to original pixel (3,20).
             compose.runOnIdle { model.sample(11.25, 150.0, 300.0, 300.0) }
             compose.waitUntil(20_000) { !model.state.value.sampling && model.state.value.positive != null }
@@ -110,7 +111,7 @@ class NegativeScanQueueRecoveryTest {
             val completedHash = sha(context.contentResolver.openInputStream(Uri.parse(completedUri))!!.use { it.readBytes() })
             val firstRows = outputs(prefix)
             assertEquals(1, firstRows.size); assertTrue(firstRows.all { it.pending == 0 })
-            compose.onNodeWithText("Retry failed exports").performScrollTo()
+            compose.onNodeWithText("重试失败项").performScrollTo()
             screenshot(evidence, "01-one-failed-one-complete")
 
             // A stable lifecycle boundary: the failed job waits for explicit retry, so no
@@ -127,7 +128,7 @@ class NegativeScanQueueRecoveryTest {
             assertEquals(originalHashes[0], sha(damagedFile!!.readBytes()))
             // Deliberately change the current roll. Retry must retain its original snapshot.
             compose.runOnIdle { model.settings(snapshot.copy(exposure = -.75, temperature = -.3, tint = .3)); model.commit() }
-            compose.onNodeWithText("Retry failed exports").performScrollTo().performClick()
+            compose.onNodeWithText("重试失败项").performScrollTo().performClick()
             compose.waitUntil(30_000) { !model.state.value.exporting && model.state.value.roll.jobs.size == 2 && model.state.value.roll.jobs.all { it.status == NegativeJobStatus.COMPLETE } }
             val finalJobs = model.state.value.roll.jobs
             assertEquals(firstJobs.map { it.id }, finalJobs.map { it.id })
@@ -151,7 +152,7 @@ class NegativeScanQueueRecoveryTest {
                         .put("snapshot", Json.encodeToString(job.settings)).put("sourceSha256", originalHashes[index]))
                 } finally { decoded.recycle() }
             }
-            compose.onNodeWithText("Export queue: 2 saved · 0 pending · 0 failed").performScrollTo()
+            compose.onNodeWithText("导出队列：2 已保存，0 待处理，0 失败").performScrollTo()
             screenshot(evidence, "02-retried-without-duplicate")
             report.put("status", "PASS").put("initialCompletedOutputs", firstRows.size).put("finalCompletedOutputs", finalRows.size)
                 .put("pendingRows", finalRows.count { it.pending != 0 }).put("checks", checks)

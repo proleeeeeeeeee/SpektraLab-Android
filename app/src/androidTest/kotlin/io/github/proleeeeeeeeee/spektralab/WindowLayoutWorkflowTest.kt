@@ -43,36 +43,40 @@ class WindowLayoutWorkflowTest {
             compose.runOnIdle { model.importPhoto(uri) }
             compose.waitUntil(120_000) { model.state.value.photo?.displayName=="window-real.png" && !model.state.value.importing && !model.state.value.rendering && model.state.value.preview!=null }
             capture("editor")
-            val image=compose.onNodeWithContentDescription("Processed photograph").fetchSemanticsNode().boundsInRoot
+            val image=compose.onNodeWithTag("editor-preview-image").fetchSemanticsNode().boundsInRoot
             val density=context.resources.displayMetrics.density
             assertTrue("Editor photo area collapsed: $image",image.width>=120*density && image.height>=100*density)
-            clickReachable(compose.onNodeWithText("Material details / compare"))
-            compose.onNodeWithText("Close details").performScrollTo().assertIsDisplayed().performClick()
-            clickReachable(compose.onNodeWithContentDescription("Back to photographs"))
-            clickReachable(compose.onNodeWithText("Light table"))
+            if (compose.onAllNodesWithTag("open-material-browser").fetchSemanticsNodes().isEmpty())
+                clickReachable(compose.onNodeWithTag("editor-tool-film"))
+            clickReachable(compose.onNodeWithTag("open-material-browser"))
+            clickReachable(compose.onNodeWithTag("material-details"))
+            compose.onNodeWithTag("comparison-close").performScrollTo().assertIsDisplayed().performClick()
+            clickReachable(compose.onNodeWithTag("material-browser-done"))
+            clickReachable(compose.onNodeWithTag("editor-back"))
+            clickReachable(compose.onNodeWithTag("workspace-view-table"))
             val light=ViewModelProvider(compose.activity)[LightTableViewModel::class.java]
             compose.waitUntil(120_000) { light.state.value.layoutReady && !light.state.value.loading && light.state.value.images.size==1 }
             capture("board")
             val board=compose.onNodeWithTag("light-table-board").fetchSemanticsNode().boundsInRoot
             assertTrue("Light table area collapsed: $board",board.width>=120*density && board.height>=120*density)
-            if (light.state.value.layout.loupeEnabled) clickReachable(compose.onNodeWithText("Loupe"))
+            if (light.state.value.layout.loupeEnabled) clickReachable(compose.onNodeWithTag("table-loupe"))
             val initial=light.state.value.layout.displayPlacements.first()
             val center=Offset((initial.x*board.width).toFloat(),(initial.y*board.height).toFloat())
             compose.onNodeWithTag("light-table-board").performTouchInput { swipe(center,center+Offset(board.width*.08f,board.height*.10f),500) }
             compose.waitUntil(5_000) { light.state.value.layout.displayPlacements.first { it.photoId==initial.photoId }.x>initial.x+.02 }
             val moved=light.state.value.layout.displayPlacements.first { it.photoId==initial.photoId }
-            clickReachable(compose.onNodeWithText("Rate / mark"))
-            compose.onNodeWithText("Done marking").performScrollTo().assertIsDisplayed().performClick()
+            clickReachable(compose.onNodeWithTag("review-mark"))
+            compose.onNodeWithTag("review-done").assertIsDisplayed().performClick()
             clickReachable(compose.onNodeWithTag("review-filter"))
-            compose.onNodeWithText("Apply filter").performScrollTo().assertIsDisplayed().performClick()
-            clickReachable(compose.onNodeWithContentDescription("Back to photographs"))
-            clickReachable(compose.onNodeWithText("Light table"))
+            compose.onNodeWithTag("filter-apply").assertIsDisplayed().performClick()
+            clickReachable(compose.onNodeWithTag("workspace-view-grid"))
+            clickReachable(compose.onNodeWithTag("workspace-view-table"))
             compose.waitUntil(120_000) { light.state.value.layoutReady && !light.state.value.loading && light.state.value.images.size==1 }
             assertEquals(moved,light.state.value.layout.displayPlacements.first { it.photoId==moved.photoId })
             val local=Offset((moved.x*board.width).toFloat(),(moved.y*board.height).toFloat())
             compose.onNodeWithTag("light-table-board").performTouchInput { doubleClick(local) }
             compose.waitUntil(120_000) { model.state.value.showEditor && !model.state.value.rendering }
-            clickReachable(compose.onNodeWithContentDescription("Back to light table"))
+            clickReachable(compose.onNodeWithTag("editor-back"))
             compose.waitUntil(120_000) { light.state.value.layoutReady && !light.state.value.loading && light.state.value.images.size==1 }
             assertEquals(moved,light.state.value.layout.displayPlacements.first { it.photoId==moved.photoId })
             capture("touch-return")

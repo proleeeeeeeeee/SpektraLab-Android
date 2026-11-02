@@ -91,6 +91,7 @@ class MaterialArtworkWorkflowTest {
             compose.runOnIdle { model.importPhoto(uri) }
             compose.waitUntil(120_000) { model.state.value.photo?.displayName=="selector-fixture.png" && !model.state.value.importing && !model.state.value.rendering }
             compose.runOnIdle { model.adjust(Adjustment.GRAIN,0f);model.adjust(Adjustment.HALATION,0f);model.finishInteraction() }
+            compose.onNodeWithTag("open-material-browser").performClick()
             val rail=compose.onNodeWithTag("material-options")
             repeat(2) { round ->
                 for (film in if (round==0) Materials.films else Materials.films.reversed()) {
@@ -99,7 +100,7 @@ class MaterialArtworkWorkflowTest {
                     assertEquals(film.id,model.state.value.recipe.filmId)
                     // Recreate only the artwork rail so native pressed/focus feedback cannot tint its pixels.
                     // The actual touch selection above is asserted separately and remains selected.
-                    compose.onNodeWithText("Frame").performClick();compose.onNodeWithText("Film").performClick()
+                    compose.onNodeWithTag("material-tab-paper").performClick();compose.onNodeWithTag("material-tab-film").performClick()
                     rail.performScrollToNode(hasTestTag("material-choice-${film.id}"))
                     if (filmCoverResource(film.id)!=null) {
                         compose.waitUntil(30_000) { compose.onAllNodesWithTag("film-cover-${film.id}",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
@@ -116,7 +117,7 @@ class MaterialArtworkWorkflowTest {
                 assertTrue(samples.state.value.failed.isEmpty());assertEquals(count,samples.state.value.images.size)
                 assertTrue(samples.state.value.images.values.sumOf { it.allocationByteCount }<=8*192*192*4)
             }
-            compose.onNodeWithText("Paper").performClick();waitSamples(8)
+            compose.onNodeWithTag("material-tab-paper").performClick();waitSamples(8)
             val stored=model.state.value.photo!!
             file=runBlocking { PhotoStore(context).source(stored) };backup=file!!.readBytes()
             val expected=runBlocking {
@@ -141,19 +142,19 @@ class MaterialArtworkWorkflowTest {
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED);waitSamples(8)
             compose.waitUntil(120_000) { !model.state.value.rendering }
             file!!.writeBytes(byteArrayOf(0,1,2,3))
-            compose.onNodeWithText("Film").performClick();compose.onNodeWithText("Paper").performClick()
+            compose.onNodeWithTag("material-tab-film").performClick();compose.onNodeWithTag("material-tab-paper").performClick()
             compose.waitUntil(120_000) { !samples.state.value.loading && samples.state.value.failed.size==8 }
             assertTrue(samples.state.value.images.isEmpty())
-            assertTrue(compose.onAllNodesWithText("Sample unavailable").fetchSemanticsNodes().isNotEmpty());screenshot("paper-unavailable")
+            assertTrue(compose.onAllNodesWithText("小样暂不可用").fetchSemanticsNodes().isNotEmpty());screenshot("paper-unavailable")
             file!!.writeBytes(backup!!)
-            compose.onNodeWithText("Retry samples").performClick();waitSamples(8)
-            compose.onNodeWithText("Film").performClick();rail.performScrollToNode(hasText("Tri-X 400"));compose.onNodeWithText("Tri-X 400").performClick()
-            compose.onNodeWithText("Paper").performClick();waitSamples(1)
+            compose.onNodeWithTag("paper-samples-retry").performClick();waitSamples(8)
+            compose.onNodeWithTag("material-tab-film").performClick();rail.performScrollToNode(hasText("Tri-X 400"));compose.onNodeWithText("Tri-X 400").performClick()
+            compose.onNodeWithTag("material-tab-paper").performClick();waitSamples(1)
             assertEquals(setOf("ilford_multigrade_iv_rc"),samples.state.value.images.keys)
             assertImage(compose.onNodeWithTag("paper-sample-ilford_multigrade_iv_rc",useUnmergedTree=true),samples.state.value.images.values.single(),true,"ilford_multigrade_iv_rc")
             screenshot("paper-ilford_multigrade_iv_rc")
-            compose.onNodeWithText("Film").performClick();rail.performScrollToNode(hasText("Gold 200"));compose.onNodeWithText("Gold 200").performClick()
-            compose.onNodeWithText("Paper").performClick();waitSamples(8)
+            compose.onNodeWithTag("material-tab-film").performClick();rail.performScrollToNode(hasText("Gold 200"));compose.onNodeWithText("Gold 200").performClick()
+            compose.onNodeWithTag("material-tab-paper").performClick();waitSamples(8)
             assertFalse("No stale monochrome sample may remain",samples.state.value.images.containsKey("ilford_multigrade_iv_rc"))
             compose.waitUntil(120_000) { !model.state.value.rendering }
             val threadsBefore=Thread.getAllStackTraces().keys.count { it.name=="FilmEngine" && it.isAlive }

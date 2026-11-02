@@ -38,8 +38,8 @@ class ContactSheetInterruptionTest {
             File(evidence,"$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
         }
         fun start() {
-            compose.onNodeWithText("Export...").performClick();compose.onNodeWithText("Contact sheet...").performClick()
-            compose.onNodeWithTag("sheet-save").performScrollTo().performClick()
+            compose.onNodeWithTag("review-export").performClick();compose.onNodeWithTag("review-contact-sheet").performClick()
+            compose.onNodeWithTag("sheet-save").assertIsDisplayed().performClick()
         }
         fun assertCancelled(ids: List<String>) {
             compose.waitUntil(120_000) { !sheet.state.value.busy && sheet.state.value.error!=null }
@@ -48,7 +48,7 @@ class ContactSheetInterruptionTest {
             assertTrue(journal.loadUris().isEmpty());assertTrue(File(context.cacheDir,"contact-sheets").listFiles().orEmpty().isEmpty())
         }
         fun retry(label: String) {
-            compose.onNodeWithText("Retry contact sheet").performClick()
+            compose.onNodeWithTag("sheet-retry").performClick()
             compose.waitUntil(180_000) { !sheet.state.value.busy && (sheet.state.value.outputs.isNotEmpty() || sheet.state.value.error!=null) }
             assertNull(sheet.state.value.error);assertEquals(1,sheet.state.value.outputs.size)
             val uri=sheet.state.value.outputs.single();outputs+=uri
@@ -56,7 +56,7 @@ class ContactSheetInterruptionTest {
             resolver.openFileDescriptor(uri,"r")!!.use { descriptor -> PdfRenderer(descriptor).use { assertEquals(1,it.pageCount) } }
             resolver.openInputStream(uri)!!.use { input -> File(evidence,"$label.pdf").outputStream().use { input.copyTo(it) } }
             capture("$label-saved")
-            compose.onNodeWithText("Continue selecting").performClick()
+            compose.onNodeWithTag("sheet-dismiss").performClick()
             compose.waitUntil(120_000) { !light.state.value.loading && light.state.value.images.size==2 }
         }
         compose.waitUntil(120_000) { model.state.value.ready && sheet.state.value.ready };assertNull(sheet.state.value.error)
@@ -72,13 +72,13 @@ class ContactSheetInterruptionTest {
             val photos=model.state.value.library.active.photos;val ids=photos.map { it.id };val store=PhotoStore(context)
             fun hash(file: File)=MessageDigest.getInstance("SHA-256").digest(file.readBytes()).toList()
             val originals=photos.associate { it.id to hash(store.source(it)) }
-            compose.onNodeWithText("Light table").performClick()
+            compose.onNodeWithTag("workspace-view-table").performClick()
             compose.waitUntil(120_000) { light.state.value.layoutReady && !light.state.value.loading && light.state.value.images.size==2 }
-            start();compose.onNodeWithText("Cancel contact sheet").performClick();assertCancelled(ids)
-            compose.onNodeWithText(message).assertIsDisplayed();capture("explicit-cancel-correct-message");retry("explicit-cancel-retry")
+            start();compose.onNodeWithTag("sheet-cancel").performClick();assertCancelled(ids)
+            compose.onNodeWithTag("sheet-error-message").assertTextContains("取消", substring = true).assertIsDisplayed();capture("explicit-cancel-correct-message");retry("explicit-cancel-retry")
             start();compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED);assertCancelled(ids)
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED);compose.activityRule.scenario.recreate()
-            compose.onNodeWithText(message).assertIsDisplayed();capture("background-cancel-correct-message");retry("background-cancel-retry")
+            compose.onNodeWithTag("sheet-error-message").assertTextContains("取消", substring = true).assertIsDisplayed();capture("background-cancel-correct-message");retry("background-cancel-retry")
             for (photo in photos) assertEquals(originals[photo.id],hash(store.source(photo)))
             assertNull(journal.load());assertTrue(journal.loadUris().isEmpty())
             File(evidence,"report.json").writeText(org.json.JSONObject().put("realPhotos",2).put("explicitCancelMessage",true).put("backgroundCancelMessage",true).put("activityRestore",true).put("successfulRetries",2).put("originalsUnchanged",true).put("stagingEmpty",true).toString(2))

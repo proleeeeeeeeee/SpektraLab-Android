@@ -23,31 +23,30 @@ class NegativeScanEntryTest {
         assertNull(editor().state.value.error)
         compose.runOnIdle { editor().showLibrary() }
         val library = editor().state.value.library
-        compose.onNodeWithText("Negative scans").performClick()
+        compose.onNodeWithTag("nav-tools").performClick()
         compose.waitUntil(20_000) { negative().state.value.ready }
         compose.onNodeWithTag("negative-screen").assertExists()
-        compose.onNodeWithText("8-bit sRGB JPEG/PNG workflow", substring = true)
-            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("negative-step-import").assertExists()
         assertFalse("The normal film renderer must pause on the negative route", editor().state.value.rendering)
         capture("library-entry.png")
         compose.activityRule.scenario.recreate()
         compose.waitForIdle()
         compose.onNodeWithTag("negative-screen").assertExists()
         compose.onNodeWithTag("negative-calibration").performScrollTo().performClick()
-        compose.onNodeWithText("Calibrated reconstruction unavailable").assertIsDisplayed()
+        compose.onNodeWithText("尚不提供校准重建").assertIsDisplayed()
         capture("calibration-disclosure.png")
-        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithText("知道了").performClick()
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
-        compose.onNodeWithText("Negative scans").assertIsDisplayed()
+        compose.onNodeWithTag("photos-workspace").assertExists()
         assertEquals("Independent scan work must preserve all positive projects, recipes and export jobs",
             library, editor().state.value.library)
         assertNull("Leaving the negative route releases its preview references", negative().state.value.negative)
         assertNull(negative().state.value.positive)
-        compose.onNodeWithText("Negative scans").performClick()
+        compose.onNodeWithTag("nav-tools").performClick()
         compose.waitUntil(20_000) { negative().state.value.ready && !negative().state.value.loading }
-        compose.onNodeWithText("Back").performScrollTo().performClick()
-        compose.onNodeWithText("Negative scans").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回照片入口").performClick()
+        compose.onNodeWithTag("photos-workspace").assertExists()
         assertEquals(library, editor().state.value.library)
     }
 

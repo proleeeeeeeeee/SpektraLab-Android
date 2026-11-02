@@ -6,7 +6,7 @@ import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.provider.MediaStore
-import androidx.compose.material3.MaterialTheme
+import io.github.proleeeeeeeeee.spektralab.ui.SpektraTheme
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -32,14 +32,14 @@ class NegativeScanUiTest {
         val model = NegativeScanViewModel(context.applicationContext as Application, directory)
         var returned = false
         try {
-            compose.setContent { MaterialTheme { NegativeScanScreen(onBack = { returned = true }, model = model) } }
+            compose.setContent { SpektraTheme { NegativeScanScreen(onBack = { returned = true }, model = model) } }
             compose.waitUntil(10_000) { model.state.value.ready }
             compose.onNodeWithTag("negative-empty").performScrollTo().assertIsDisplayed()
             compose.onNodeWithTag("negative-import").assertIsEnabled()
             compose.onNodeWithTag("negative-calibration").performClick()
-            compose.onNodeWithText("Calibrated reconstruction unavailable").assertIsDisplayed()
-            compose.onNodeWithText("Close").performClick()
-            compose.onNodeWithText("Back").performScrollTo().performClick()
+            compose.onNodeWithText("尚不提供校准重建").assertIsDisplayed()
+            compose.onNodeWithText("知道了").performClick()
+            compose.onNodeWithText("返回").performScrollTo().performClick()
             assertTrue(returned)
         } finally { compose.runOnIdle { model.pause() }; File(context.filesDir, directory).deleteRecursively() }
     }
@@ -59,7 +59,7 @@ class NegativeScanUiTest {
                 try { context.contentResolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } } finally { bitmap.recycle() }
                 context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
             }
-            compose.setContent { MaterialTheme { NegativeScanScreen(onBack = {}, model = model) } }
+            compose.setContent { SpektraTheme { NegativeScanScreen(onBack = {}, model = model) } }
             compose.waitUntil(10_000) { model.state.value.ready }
             compose.runOnIdle { model.import(uris) }
             compose.waitUntil(20_000) { !model.state.value.importing && model.state.value.roll.photos.size == 2 && model.state.value.negative != null }
@@ -96,7 +96,7 @@ class NegativeScanUiTest {
         store.save(NegativeRoll(revision = 1, photos = listOf(photo), jobs = listOf(published, interrupted), settings = settings))
         val model = NegativeScanViewModel(context.applicationContext as Application, directory)
         try {
-            compose.setContent { MaterialTheme { NegativeScanScreen(onBack = {}, model = model) } }
+            compose.setContent { SpektraTheme { NegativeScanScreen(onBack = {}, model = model) } }
             compose.waitUntil(10_000) { model.state.value.ready }
             val jobs = model.state.value.roll.jobs
             assertEquals(NegativeJobStatus.COMPLETE, jobs[0].status); assertEquals(saved.toString(), jobs[0].outputUri)
