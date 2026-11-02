@@ -44,12 +44,12 @@ class PhotoWorkflowTest {
             compose.waitUntil(120_000) { !model.state.value.importing && model.state.value.photo?.displayName == "hdr-paper-error.png" }
             compose.runOnIdle { model.selectFilm("kodak_tri_x_400") }
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.recipe.filmId == "kodak_tri_x_400" }
-            val beforeExport = model.state.value.preview
+            assertNotNull(model.state.value.preview)
             compose.runOnIdle { model.export(ExportSettings(ExportFormat.HDR_JPEG)) }
             compose.waitUntil(120_000) { !model.state.value.exporting && model.state.value.error != null }
             compose.waitUntil(120_000) {
                 val state = model.state.value
-                !state.rendering && state.preview != null && state.preview !== beforeExport
+                !state.rendering && state.preview != null && state.previewRecipe == state.recipe
             }
             val message = model.state.value.error
             assertNotNull("Automatic preview must retain the export failure",message)
@@ -91,7 +91,7 @@ class PhotoWorkflowTest {
             assertEquals(.75,model.state.value.recipe.adjustments.exposure,.01)
             compose.onNodeWithTag("editor-undo", useUnmergedTree = true).performClick()
             assertEquals(0.0,model.state.value.recipe.adjustments.exposure,.01)
-            compose.onNodeWithTag("editor-tool-compose", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-tool-crop", useUnmergedTree = true).performClick()
             compose.onNodeWithText("Rotate 90°", useUnmergedTree = true).performClick()
             assertEquals(1,model.state.value.recipe.composition.quarterTurns)
             compose.onNodeWithText("Free crop", useUnmergedTree = true).performClick()
@@ -101,7 +101,7 @@ class PhotoWorkflowTest {
             assertEquals(.7,model.state.value.recipe.composition.crop.width,.01)
             compose.onNodeWithTag("editor-tool-paper", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("material-choice-kodak_2383", useUnmergedTree = true).performScrollTo().performClick()
-            compose.onNodeWithTag("editor-tool-compose", useUnmergedTree = true).performClick()
+            compose.onNodeWithTag("editor-tool-frame", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("material-choice-SQUARE_120", useUnmergedTree = true).performScrollTo().performClick()
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.recipe.frame == FilmFrame.SQUARE_120 }
             compose.onNodeWithTag("editor-undo", useUnmergedTree = true).performClick()

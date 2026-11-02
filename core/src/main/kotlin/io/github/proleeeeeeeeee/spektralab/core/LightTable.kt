@@ -46,11 +46,11 @@ data class LightTableLayout(
         val valid=ids.toSet()
         val clean=copy(reviews=reviews.filterKeys { it in valid },pickedIds=pickedIds.intersect(valid))
         val kept=placements.filter { it.photoId in valid };val known=kept.map { it.photoId }.toSet()
-        val added=ids.mapIndexedNotNull { index,id -> if (id in known) null else initialPlacement(id,index) }
+        val added=ids.mapIndexedNotNull { index,id -> if (id in known) null else initialPlacement(id,index,ids.size) }
         val matches=clean.matchingIds(ids);val matchSet=matches.toSet()
         val filtered=if (filter.active) {
             val old=if (filteredPlacements.map { it.photoId }.toSet()==matchSet) filteredPlacements else emptyList();val oldIds=old.map { it.photoId }.toSet()
-            old+matches.mapIndexedNotNull { index,id -> if (id in oldIds) null else initialPlacement(id,index) }
+            old+matches.mapIndexedNotNull { index,id -> if (id in oldIds) null else initialPlacement(id,index,matches.size) }
         } else emptyList()
         val nextPage=page.coerceAtMost(maxOf(0,(matches.size-1)/LIGHT_TABLE_PAGE_SIZE))
         val visible=matches.drop(nextPage*LIGHT_TABLE_PAGE_SIZE).take(LIGHT_TABLE_PAGE_SIZE)
@@ -77,9 +77,15 @@ data class LightTableLayout(
         return (if (filter.active && matchingIds(ids)!=next.matchingIds(ids)) next.copy(filteredPlacements=emptyList()) else next).reconcile(ids)
     }
     companion object {
-        fun initialPlacement(id: String,index: Int): FilmPlacement {
+        // Keep serialized defaults compatible with older omitted fields.
+        // Only genuinely new documents start with the loupe switched off.
+        fun fresh() = LightTableLayout(loupeEnabled=false,loupeX=.5,loupeY=.5)
+        fun initialPlacement(id: String,index: Int,total: Int = LIGHT_TABLE_PAGE_SIZE): FilmPlacement {
             val slot = index%LIGHT_TABLE_PAGE_SIZE
-            return FilmPlacement(id,if (slot%2==0) .27 else .73,.14+(slot/2)*.235,if (slot%2==0) -4.0 else 4.0)
+            val count=if (total<=index) LIGHT_TABLE_PAGE_SIZE else minOf(LIGHT_TABLE_PAGE_SIZE,total-index/LIGHT_TABLE_PAGE_SIZE*LIGHT_TABLE_PAGE_SIZE)
+            val rows=(count+1)/2
+            return FilmPlacement(id,if (count==1) .5 else if (slot%2==0) .27 else .73,
+                (slot/2+.5)/rows,if (slot%2==0) -4.0 else 4.0)
         }
     }
 }
@@ -90,10 +96,11 @@ data class TableFrame(val width: Double,val height: Double,val imageLeft: Double
 
 /** One transform contract is used by drawing, hit testing and loupe pixel tests. */
 object LightTableGeometry {
-    fun frame(boardWidth: Double,boardHeight: Double,photoWidth: Int,photoHeight: Int): TableFrame {
+    fun frame(boardWidth: Double,boardHeight: Double,photoWidth: Int,photoHeight: Int,count: Int = LIGHT_TABLE_PAGE_SIZE): TableFrame {
         require(boardWidth > 0 && boardHeight > 0 && photoWidth > 0 && photoHeight > 0)
         val aspect = photoWidth.toDouble()/photoHeight
-        val width = min(boardWidth*.43,boardHeight*.25/(.82/aspect+.26))
+        val rows=(count.coerceIn(1,LIGHT_TABLE_PAGE_SIZE)+1)/2
+        val width = min(boardWidth*(if (count==1) .66 else .43),boardHeight*(.86/rows)/(.82/aspect+.26))
         val imageWidth = width*.82;val imageHeight = imageWidth/aspect
         val height = imageHeight+width*.26
         return TableFrame(width,height,-imageWidth/2,-imageHeight/2,imageWidth,imageHeight)

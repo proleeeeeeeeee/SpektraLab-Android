@@ -27,7 +27,13 @@ data class Adjustments(
     /** Native scan-tone order; exposure and physical effects travel separately. */
     fun scanTone() = floatArrayOf(temperature.toFloat(), tint.toFloat(), contrast.toFloat(),
         saturation.toFloat(), highlights.toFloat(), shadows.toFloat())
+
+    fun withoutScanTone() = copy(temperature = 0.0, tint = 0.0, contrast = 0.0,
+        saturation = 0.0, highlights = 0.0, shadows = 0.0)
 }
+
+/** Physical processing stays in the engine; scan-only edits share this base. */
+fun EditRecipe.scanBase() = copy(adjustments = adjustments.withoutScanTone())
 
 enum class Adjustment(val label: String, val minimum: Float, val maximum: Float, val initial: Float = 0f) {
     EXPOSURE("Exposure", -3f, 3f), TEMPERATURE("Temperature", -100f, 100f),

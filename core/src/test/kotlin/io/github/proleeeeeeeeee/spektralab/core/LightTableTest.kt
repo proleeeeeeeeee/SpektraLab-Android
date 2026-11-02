@@ -9,6 +9,17 @@ import org.junit.Test
 import kotlin.test.assertFailsWith
 
 class LightTableTest {
+    @Test fun smallProjectsStartCenteredAndUseMoreOfTheTable() {
+        val layout=LightTableLayout.fresh().reconcile(listOf("only-photo"))
+        assertFalse(layout.loupeEnabled)
+        assertEquals(.5,layout.placements.single().x,0.0)
+        assertEquals(.5,layout.placements.single().y,0.0)
+        val one=LightTableGeometry.frame(400.0,600.0,800,1200,1)
+        val eight=LightTableGeometry.frame(400.0,600.0,800,1200,8)
+        assertTrue(one.height>eight.height*2)
+        val moved=layout.copy(placements=listOf(layout.placements.single().copy(x=.36,y=.41)))
+        assertEquals(moved.placements,moved.reconcile(listOf("only-photo")).placements)
+    }
     @Test fun inverseSamplingRoundTripsAfterDraggingRotationAndViewportChanges() {
         for ((w,h) in listOf(360.0 to 500.0,900.0 to 600.0)) {
             val frame=LightTableGeometry.frame(w,h,1600,1000)

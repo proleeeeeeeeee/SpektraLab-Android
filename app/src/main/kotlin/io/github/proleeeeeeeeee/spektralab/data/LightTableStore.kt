@@ -27,7 +27,7 @@ class LightTableStore(context: Context) {
     }
     private fun read(id: String): SavedLightTable {
         val target=file(id)
-        if (!target.baseFile.exists() && !File(target.baseFile.path+".bak").exists()) return SavedLightTable()
+        if (!target.baseFile.exists() && !File(target.baseFile.path+".bak").exists()) return SavedLightTable(layout=LightTableLayout.fresh())
         require(target.baseFile.length()<=2_097_152) { "Light table layout exceeds its size limit" }
         return json.decodeFromString<SavedLightTable>(target.readFully().toString(Charsets.UTF_8))
     }

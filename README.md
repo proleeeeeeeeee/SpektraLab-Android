@@ -10,6 +10,10 @@ The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer w
 
 ## Current workflow
 
+- Photos / Presets / Negatives navigation, contextual library actions and a dedicated saved-look library.
+- A photo-first editor with independent Film / Print / Frame / Adjust / Crop tools; the full material catalog stays inside the editor.
+- Immediate discrete preview requests, bounded recent-recipe caching and idle neighbor-film warm-up. Previous pixels remain labeled while updating.
+- GPU scan-tone drag previews on Android 13+, followed by exact native float previews on release. Older devices use native draft previews.
 - System multi-photo picker and document picker for RAW files; access is limited to selected files.
 - Eleven films: Gold 200, Portra 160/400/800, Ektar 100, CineStill 800T, C200, Tri-X 400, HP5 Plus 400, T-Max 100 and Acros 100 II. The CineStill profile retains its documented derived identity.
 - Nine compatible print materials, including color papers, motion-picture print films and Ilford Multigrade IV RC for black and white. Materials show their source, characteristics and comparisons.

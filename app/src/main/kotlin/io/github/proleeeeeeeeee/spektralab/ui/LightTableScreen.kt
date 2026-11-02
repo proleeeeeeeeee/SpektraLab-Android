@@ -197,7 +197,7 @@ internal fun LightTableControlPanel(state: LightTableState, model: LightTableVie
 
 private fun frameFor(state: LightTableState,photo: StoredPhoto,w: Double,h: Double): TableFrame {
     val image=state.images[photo.id]
-    return LightTableGeometry.frame(w,h,image?.width ?: photo.width.coerceAtLeast(1),image?.height ?: photo.height.coerceAtLeast(1))
+    return LightTableGeometry.frame(w,h,image?.width ?: photo.width.coerceAtLeast(1),image?.height ?: photo.height.coerceAtLeast(1),state.pagePhotos.size)
 }
 private fun hitFilm(state: LightTableState,point: Offset,w: Double,h: Double): FilmPlacement? {
     if (w<=0 || h<=0) return null

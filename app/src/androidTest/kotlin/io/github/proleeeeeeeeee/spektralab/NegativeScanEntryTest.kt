@@ -23,7 +23,7 @@ class NegativeScanEntryTest {
         assertNull(editor().state.value.error)
         compose.runOnIdle { editor().showLibrary() }
         val library = editor().state.value.library
-        compose.onNodeWithTag("nav-tools").performClick()
+        compose.onNodeWithTag("nav-negatives").performClick()
         compose.waitUntil(20_000) { negative().state.value.ready }
         compose.onNodeWithTag("negative-screen").assertExists()
         compose.onNodeWithTag("negative-step-import").assertExists()
@@ -43,7 +43,7 @@ class NegativeScanEntryTest {
             library, editor().state.value.library)
         assertNull("Leaving the negative route releases its preview references", negative().state.value.negative)
         assertNull(negative().state.value.positive)
-        compose.onNodeWithTag("nav-tools").performClick()
+        compose.onNodeWithTag("nav-negatives").performClick()
         compose.waitUntil(20_000) { negative().state.value.ready && !negative().state.value.loading }
         compose.onNodeWithTag("negative-back").performScrollTo().performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithTag("photos-workspace").fetchSemanticsNodes().isNotEmpty() }

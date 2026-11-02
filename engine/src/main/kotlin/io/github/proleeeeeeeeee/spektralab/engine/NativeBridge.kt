@@ -19,6 +19,7 @@ internal object NativeBridge {
                             edge: Int, budget: Long, raw: Boolean, destination: String, gainPath: String,
                             format: Int, quality: Int): FloatArray
     external fun capabilities(handle: Long): String
+    external fun statistics(handle: Long): LongArray
     external fun cancel(handle: Long)
     external fun destroy(handle: Long)
 }

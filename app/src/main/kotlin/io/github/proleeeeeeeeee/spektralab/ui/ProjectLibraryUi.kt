@@ -60,7 +60,7 @@ internal fun ProjectActions(state: EditorState, model: EditorViewModel, modifier
         TextButton(onClick = { menu = true }, enabled = !state.importing && !state.exporting,
             modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-project")) {
             Text(state.library.active.name + " ▾", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleLarge)
+                style = MaterialTheme.typography.titleLarge,color=PaperWhite)
         }
         DropdownMenu(menu, { menu = false }) {
             state.library.projects.forEach { project -> DropdownMenuItem(text = { Text(project.name) },
@@ -143,17 +143,17 @@ private fun WorkspacePhotoTile(photo: StoredPhoto, number: Int, selected: Boolea
         }
         Text(photo.displayName, Modifier.padding(top = 7.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (selected) AccentColor else PaperWhite, style = MaterialTheme.typography.bodySmall)
-        Text((if (review.rating > 0) "${review.rating}★" else "Unrated") +
+        if (review.rating > 0 || review.flag != ReviewFlag.NONE) Text((if (review.rating > 0) "${review.rating}★" else "") +
             if (review.flag == ReviewFlag.NONE) "" else "  ${reviewFlagName(review.flag)}",
             color = MutedColor, style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.testTag("photo-review-${photo.id}"))
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (selectionMode) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onMark, enabled = metadataReady,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("photo-mark-${photo.id}"), contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Mark") }
             TextButton(onClick = onPick, enabled = metadataReady,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("photo-picked-${photo.id}")
                     .semantics { contentDescription = if (picked) "Remove ${photo.displayName} from picks" else "Pick ${photo.displayName}" },
-                contentPadding = PaddingValues(horizontal = 6.dp)) { Text(if (picked) "Picked" else "Selected", color = if (picked) AccentColor else MutedColor) }
+                contentPadding = PaddingValues(horizontal = 6.dp)) { Text(if (picked) "Picked" else "Pick", color = if (picked) AccentColor else MutedColor) }
         }
     }
 }

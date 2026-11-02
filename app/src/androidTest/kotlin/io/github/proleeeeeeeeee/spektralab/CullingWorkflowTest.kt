@@ -124,6 +124,7 @@ class CullingWorkflowTest {
             assertEquals(beforeGrid.pickedIds, light.state.value.layout.pickedIds)
             compose.onNodeWithTag("workspace-multiselect").performClick()
             assertTrue(model.state.value.selection.isEmpty())
+            compose.onNodeWithTag("workspace-multiselect").performClick()
             compose.onNodeWithTag("workspace-grid").performScrollToNode(hasTestTag("photo-mark-${ids[0]}"))
             compose.onNodeWithTag("photo-mark-${ids[0]}").performClick()
             compose.onNodeWithTag("review-rating-4").performScrollTo().performClick()

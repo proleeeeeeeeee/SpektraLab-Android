@@ -53,7 +53,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
         active = renderBoard
         val same = previous.project?.id == project.id && previous.layoutReady
         val cached = SavedLightTable(previous.revision, previous.layout)
-        val initial = (if (same) cached.layout else LightTableLayout()).reconcile(project.photos.map { it.id })
+        val initial = (if (same) cached.layout else LightTableLayout.fresh()).reconcile(project.photos.map { it.id })
         mutableState.value = LightTableState(project = project, layout = initial, loading = true)
         val token = ++generation
         activationJob = viewModelScope.launch {
@@ -154,7 +154,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
         val id=state.value.layout.selectedId ?: return
         change { layout -> layout.positions { poses -> poses.map { if (it.photoId==id) it.rotated(15.0) else it } } };commit()
     }
-    fun arrange() { change { layout -> layout.positions { state.value.filteredPhotos.mapIndexed { i,p -> LightTableLayout.initialPlacement(p.id,i) } } };commit() }
+    fun arrange() { change { layout -> layout.positions { state.value.filteredPhotos.mapIndexed { i,p -> LightTableLayout.initialPlacement(p.id,i,state.value.filteredPhotos.size) } } };commit() }
     fun page(delta: Int) {
         val ids=state.value.filteredPhotos.map { it.id }
         val next=(state.value.layout.page+delta).coerceIn(0,maxOf(0,(ids.size-1)/LIGHT_TABLE_PAGE_SIZE))

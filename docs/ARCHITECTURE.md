@@ -10,7 +10,13 @@ The native engine, shaders and profiles are pinned together at upstream revision
 
 The ViewModel serializes UI events on Main and stores small immutable recipes. Fifty recipe steps bound undo history independently of bitmap size. Film changes select a compatible paper; unsupported material IDs never cross the native boundary.
 
-One executor owns the Vulkan engine and its cached session. Preview requests are debounced and use collectLatest plus generation checks to reject stale results. Cancellation signals the native session; queued work and destruction stay ordered. The JNI registry exposes opaque IDs, retains in-flight ownership, and validates dimensions, strides, types and output limits.
+One executor owns the Vulkan engine and its cached session. A conflated channel processes the latest requested preview without a fixed delay for discrete selections. Heavy gestures use a 512 px draft and a short coalescing interval; release requests an exact 1024 px preview. Generation checks reject obsolete results. Cancellation signals the native session; queued work and destruction stay ordered. The JNI registry exposes opaque IDs, retains in-flight ownership, and validates dimensions, strides, types and output limits.
+
+Native sessions track applied parameters independently of completed rendered pixels. Only changed fields reach `spk_set_params`: repeating an unchanged film field would invalidate the negative even for a paper-only edit. Failed updates force a fresh source session, and a cancelled readback cannot retain the previous cache identity.
+
+A main-thread LRU retains at most four exact/neutral bitmap pairs and 24 MiB of bitmap allocation. Keys include private source identity, file size/modification time, complete recipe and preview size. It is process-local, so engine/resource changes cannot reuse old entries across app upgrades. Low-priority warm-up considers at most two adjacent films after 700 ms idle, never displacing a full set of user-viewed entries. Backgrounding cancels work and releases the cache. Bitmaps still owned by Compose are not manually recycled.
+
+The last completed preview keeps its own recipe while a new one develops. The UI labels it `Updating…` or `Previous preview`; a failure clears it and exposes the error. Exact cache hits use the same recipe identity. Save requests coalesce independently of rendering and retain revision conflict checks.
 
 The system photo/document picker grants selected content URIs. A bounded stream copies each to a UUID-named private file. LibRaw develops supported RAWs at full size with as-shot WB, no automatic brightening and linear RGB16 ProPhoto. The NDK ImageDecoder decodes ordinary images into client-owned RGBA_F16 sRGB memory at the requested size. Header dimensions, byte counts and memory admission are checked before large work. Untrusted display names are never used as filesystem paths.
 
@@ -21,6 +27,8 @@ An AtomicFile index owns named projects, photo metadata/recipes, presets and exp
 Exposure compensation, auto exposure, grain and halation use the upstream physical engine parameters. Temperature/tint, contrast, saturation and highlight/shadow controls form a scan-tone stage adapted from the upstream desktop reference. Android applies this subset to encoded sRGB with the same native function for preview and export, before output quantization. HDR permits values above SDR white through this stage. It does not claim parity with the desktop's ProPhoto working-space grade.
 
 The native adapter retains one ungraded scan. Scan-tone-only edits reuse it, avoiding a spectral re-render and avoiding cumulative grading of an 8-bit preview. A changed source or physical recipe invalidates it. Cancellation is checked during scan conversion; all cached texture ownership stays on the serial engine dispatcher.
+
+On Android 13 and newer, six scan-tone sliders use an AGSL drag preview of the retained neutral bitmap with the native scan-tone equations. The `Fast preview` label is explicit: its 8-bit input cannot recover values already clipped at the display boundary. Release replaces it with the authoritative native float result. A shader capability check falls back to native drafts on unsupported devices. Exposure, grain, halation and physical film changes always run through the spectral engine. Export never uses the shader or display cache.
 
 Slider gestures preview draft recipes and commit one history entry on release. Crop-sheet changes remain local until Apply crop; Cancel discards them. Serialized defaults preserve edits made by version 0.1.
 

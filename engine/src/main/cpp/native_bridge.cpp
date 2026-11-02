@@ -17,6 +17,7 @@
 #include "output_codec.hpp"
 #include "android_engine.hpp"
 #include "core/json.hpp"
+#include "parameter_delta.hpp"
 #include <algorithm>
 
 namespace {
@@ -28,6 +29,8 @@ struct EngineContext {
     spk_session* session = nullptr;
     std::string source_key;
     std::string rendered_parameters;
+    std::string applied_parameters;
+    uint64_t source_opens=0, negative_builds=0, print_renders=0, tone_scans=0;
     std::string resources;
     std::vector<float> float_scan;
     uint32_t float_width=0,float_height=0;
@@ -73,6 +76,17 @@ std::shared_ptr<EngineContext> context_for(jlong handle) {
 std::string engine_error(spk_engine* engine, const char* operation) {
     const char* detail = spk_last_error(engine);
     return std::string(operation) + ": " + (detail && *detail ? detail : "native engine error");
+}
+
+void update_parameters(EngineContext& c,const std::string& params) {
+    const auto delta=parameter_delta(c.applied_parameters,params);
+    if (delta!="{}" && spk_set_params(c.session,delta.c_str(),nullptr)!=SPK_OK) {
+        // A failed rebuild may have partially changed native state. Force a
+        // fresh source session before the next request instead of reusing it.
+        c.source_key.clear();c.applied_parameters.clear();c.rendered_parameters.clear();
+        throw std::runtime_error(engine_error(c.engine,"Updating render settings failed"));
+    }
+    c.applied_parameters=params;
 }
 
 class BitmapPixels {
@@ -132,7 +146,7 @@ jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source
         const auto source_key = utf8(env, source, 256);
         const auto params = utf8(env, parameters, 65536);
         if (source_key.empty()) throw std::invalid_argument("Missing source identity");
-        if (context->source_key != source_key || !context->session) {
+        if (context->source_key != source_key || !context->session || parameters_omit_fields(context->applied_parameters,params)) {
             spk_result_free(&context->cached_result);
             std::vector<float>().swap(context->float_scan);
             context->rendered_parameters.clear();
@@ -167,9 +181,9 @@ jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source
             context->session = spk_open(context->engine, &image, params.c_str(), nullptr);
             if (!context->session) throw std::runtime_error(engine_error(context->engine, "Opening photograph failed"));
             context->source_key = source_key;
+            context->applied_parameters=params;
         } else if (context->rendered_parameters != params) {
-            if (spk_set_params(context->session, params.c_str(), nullptr) != SPK_OK)
-                throw std::runtime_error(engine_error(context->engine, "Updating film settings failed"));
+            update_parameters(*context,params);
         }
         // Retain the ungraded 16-bit scan. Moving a scan-tone slider does not
         // re-develop the negative or grade an already graded 8-bit bitmap.
@@ -234,7 +248,7 @@ ScanTone read_tone(JNIEnv* env,jfloatArray values) {
 void release_source(EngineContext& c) {
     std::lock_guard<std::mutex> lock(c.session_mutex);
     if (c.session) { spk_session_release(c.session);c.session=nullptr; }
-    spk_result_free(&c.cached_result);c.source_key.clear();c.rendered_parameters.clear();
+    spk_result_free(&c.cached_result);c.source_key.clear();c.rendered_parameters.clear();c.applied_parameters.clear();
     std::vector<float>().swap(c.float_scan);
 }
 std::string source_parameters(const std::string& params,bool raw,bool hdr) {
@@ -247,7 +261,10 @@ std::string source_parameters(const std::string& params,bool raw,bool hdr) {
 }
 void open_source(EngineContext& c,const std::string& path,const std::string& key,
                  const std::string& params,int edge,uint64_t budget) {
-    if (c.session && c.source_key==key) return;
+    // Leaving a fitted B&W paper pack removes its explicit illuminant/filter
+    // overrides. The ABI has no delete operation, so restore profile defaults
+    // with a fresh session rather than carrying those settings into color film.
+    if (c.session && c.source_key==key && !parameters_omit_fields(c.applied_parameters,params)) return;
     release_source(c);
     const auto info=inspect_source(path);
     const double scale=edge==0?1.0:std::min(1.0,double(edge)/std::max(info.width,info.height));
@@ -262,14 +279,15 @@ void open_source(EngineContext& c,const std::string& path,const std::string& key
     std::lock_guard<std::mutex> lock(c.session_mutex);
     c.session=spk_open(c.engine,&image,actual.c_str(),nullptr);
     if (!c.session) throw std::runtime_error(engine_error(c.engine,"Opening source pixels failed"));
-    c.source_key=key;
+    c.source_key=key;c.applied_parameters=actual;c.source_opens++;
 }
 void float_render(EngineContext& c,const std::string& params,std::vector<float>& pixels,uint32_t& w,uint32_t& h) {
-    if (spk_set_params(c.session,params.c_str(),nullptr)!=SPK_OK)
-        throw std::runtime_error(engine_error(c.engine,"Updating output settings failed"));
+    update_parameters(c,params);
     std::string error;
-    if (!android_float_render(c.session,pixels,w,h,error)) throw std::runtime_error("High-precision render failed: "+error);
+    bool negative_hit=false;
+    if (!android_float_render(c.session,pixels,w,h,error,&negative_hit)) throw std::runtime_error("High-precision render failed: "+error);
     if (c.cancelled.load()) throw std::runtime_error("Processing cancelled");
+    c.print_renders++;if (!negative_hit) c.negative_builds++;
 }
 jobject bitmap_rgba(JNIEnv* env,uint32_t w,uint32_t h,const std::vector<uint8_t>& pixels) {
     jclass bitmap=env->FindClass("android/graphics/Bitmap");
@@ -308,8 +326,12 @@ jobject render_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring source
         const auto tone=read_tone(env,scan_tone);
         open_source(*c,path,key,params,edge,uint64_t(budget));
         if (c->float_scan.empty() || c->rendered_parameters!=params) {
+            // Cancellation can occur after readback. Never let partially replaced
+            // pixels keep the previous recipe's cache identity.
+            c->rendered_parameters.clear();
             float_render(*c,params,c->float_scan,c->float_width,c->float_height);c->rendered_parameters=params;
         }
+        c->tone_scans++;
         return bitmap_rgba(env,c->float_width,c->float_height,scan_rgba(c->float_scan,tone,c->cancelled));
     } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
 }
@@ -349,6 +371,13 @@ jfloatArray export_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring pa
     } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
 }
 
+jlongArray statistics(JNIEnv* env,jobject,jlong handle) {
+    try {
+        auto c=context_for(handle);std::lock_guard<std::mutex> lock(c->render_mutex);
+        const jlong values[]={jlong(c->source_opens),jlong(c->negative_builds),jlong(c->print_renders),jlong(c->tone_scans)};
+        auto result=env->NewLongArray(4);if (result) env->SetLongArrayRegion(result,0,4,values);return result;
+    } catch (const std::exception& error) { throw_error(env,error.what());return nullptr; }
+}
 jstring capabilities(JNIEnv* env, jobject, jlong handle) {
     try {
         auto context = context_for(handle);
@@ -381,6 +410,7 @@ const JNINativeMethod methods[] = {
     {const_cast<char*>("create"), const_cast<char*>("(Ljava/lang/String;)J"), reinterpret_cast<void*>(create)},
     {const_cast<char*>("render"), const_cast<char*>("(JLandroid/graphics/Bitmap;Ljava/lang/String;Ljava/lang/String;[F)Landroid/graphics/Bitmap;"), reinterpret_cast<void*>(render)},
     {const_cast<char*>("capabilities"), const_cast<char*>("(J)Ljava/lang/String;"), reinterpret_cast<void*>(capabilities)},
+    {const_cast<char*>("statistics"),const_cast<char*>("(J)[J"),reinterpret_cast<void*>(statistics)},
     {const_cast<char*>("sourceInfo"),const_cast<char*>("(Ljava/lang/String;)[I"),reinterpret_cast<void*>(source_info)},
     {const_cast<char*>("sourcePreview"),const_cast<char*>("(Ljava/lang/String;IJ)Landroid/graphics/Bitmap;"),reinterpret_cast<void*>(source_preview)},
     {const_cast<char*>("renderFile"),const_cast<char*>("(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[FIJZ)Landroid/graphics/Bitmap;"),reinterpret_cast<void*>(render_file)},

@@ -45,6 +45,26 @@ class FilmEngine(context: Context) : AutoCloseable {
             engineParameters(recipe,info.width,info.height),recipe.adjustments.scanTone(),
             longEdge.also { require(it in 64..2560) },memoryBudget(application),info.raw)
     }
+
+    /** Both bitmaps use one retained float scan; the neutral one is a drag preview only. */
+    suspend fun renderPreview(file: File, sourceKey: String, info: SourceInfo, recipe: EditRecipe,
+                              longEdge: Int = RenderPolicy.PREVIEW_LONG_EDGE): PreviewImages = withContext(dispatcher) {
+        check(!closed && handle.get() != 0L) { "Engine is not ready" }
+        require(longEdge in 64..2560)
+        val path = privateSource(application,file)
+        val parameters = engineParameters(recipe,info.width,info.height)
+        val budget = memoryBudget(application)
+        val neutral = NativeBridge.renderFile(handle.get(),path,sourceKey,parameters,FloatArray(6),longEdge,budget,info.raw)
+        val tone = recipe.adjustments.scanTone()
+        val exact = if (tone.all { it == 0f }) neutral else
+            NativeBridge.renderFile(handle.get(),path,sourceKey,parameters,tone,longEdge,budget,info.raw)
+        PreviewImages(exact,neutral)
+    }
+
+    suspend fun statistics(): LongArray = withContext(dispatcher) {
+        check(!closed && handle.get() != 0L) { "Engine is not ready" }
+        NativeBridge.statistics(handle.get())
+    }
     suspend fun prepareExport(file: File,info: SourceInfo,recipe: EditRecipe,settings: ExportSettings): PreparedExport = withContext(dispatcher) {
         check(!closed && handle.get() != 0L) { "Engine is not ready" }
         require(Build.VERSION.SDK_INT >= 30) { "Professional export requires Android 11 or newer" }
@@ -82,4 +102,9 @@ class FilmEngine(context: Context) : AutoCloseable {
         }
         executor.shutdown()
     }
+}
+
+data class PreviewImages(val exact: Bitmap, val neutral: Bitmap) {
+    val retainedBytes: Long get() = exact.allocationByteCount.toLong() +
+        if (neutral === exact) 0 else neutral.allocationByteCount.toLong()
 }

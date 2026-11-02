@@ -5,6 +5,8 @@ package io.github.proleeeeeeeeee.spektralab.editor
 import android.app.Application
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.proleeeeeeeeee.spektralab.core.*
@@ -15,12 +17,11 @@ import io.github.proleeeeeeeeee.spektralab.data.ProjectLibrary
 import io.github.proleeeeeeeeee.spektralab.engine.FilmEngine
 import io.github.proleeeeeeeeee.spektralab.engine.PhotoSource
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.currentCoroutineContext
@@ -36,6 +37,11 @@ data class EditorState(
     val photo: StoredPhoto? = null,
     val original: Bitmap? = null,
     val preview: Bitmap? = null,
+    val previewRecipe: EditRecipe? = null,
+    val neutralPreview: Bitmap? = null,
+    val fastAdjustments: Adjustments? = null,
+    val previewCacheHit: Boolean = false,
+    val previewMilliseconds: Long = 0,
     val recipe: EditRecipe = EditRecipe(),
     val material: MaterialTab = MaterialTab.FILM,
     val showEditor: Boolean = false,
@@ -43,6 +49,7 @@ data class EditorState(
     val importProgress: Int = 0,
     val importTotal: Int = 0,
     val rendering: Boolean = false,
+    val savingEdits: Boolean = false,
     val exporting: Boolean = false,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
@@ -60,13 +67,14 @@ private data class PreviewRequest(
     val photo: StoredPhoto,
     val input: Bitmap,
     val recipe: EditRecipe,
+    val edge: Int,
+    val started: Long = SystemClock.elapsedRealtime(),
 )
 
 /**
  * UI changes are serialized on Main. The engine owns a separate serial dispatcher.
  * Generation checks prevent a cancelled or older render from replacing newer edits.
  */
-@OptIn(FlowPreview::class)
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
     private val store = PhotoStore(application)
     private val exporter = PhotoExporter(application)
@@ -76,6 +84,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val mutableState = MutableStateFlow(EditorState())
     val state = mutableState.asStateFlow()
     private val requests = MutableStateFlow<PreviewRequest?>(null)
+    private val renderSignals = Channel<Unit>(Channel.CONFLATED)
+    private val saveSignals = Channel<Unit>(Channel.CONFLATED)
+    private val pendingSaves = LinkedHashMap<String,StoredPhoto>()
+    private val previewCache = PreviewCache()
+    private var warmJob: Job? = null
+    private var neutralRecipe: EditRecipe? = null
+    private var neutralPhotoId: String? = null
+    private var inspectedIdentity: String? = null
+    private var inspectedInfo: io.github.proleeeeeeeeee.spektralab.engine.SourceInfo? = null
     private var generation = 0L
     private var exportJob: Job? = null
     private var interactive = false
@@ -83,25 +100,54 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         viewModelScope.launch {
-            requests.debounce(120).collectLatest { request ->
-                if (request == null) return@collectLatest
-                // An automatic refresh after export must not dismiss its error.
-                mutableState.update { it.copy(rendering = true) }
+            for (signal in saveSignals) {
+                delay(60)
+                // Coalesce within each photo, never across photos. A quick
+                // A-to-B selection must still persist the final edit of A.
+                val batch=pendingSaves.values.toList();pendingSaves.clear()
+                for (latest in batch) {
+                    try { store.save(latest) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (failure: Exception) { mutableState.update { it.copy(error = readable(failure,"The edit could not be saved")) } }
+                }
+                if (pendingSaves.isEmpty()) mutableState.update { it.copy(savingEdits=false) }
+            }
+        }
+        viewModelScope.launch {
+            for (signal in renderSignals) {
+                // Discrete selections start immediately. Heavy drag previews
+                // coalesce briefly without waiting for the gesture to stop.
+                if (requests.value?.edge == 512) delay(24)
+                val request = requests.value ?: continue
                 try {
-                    store.save(request.photo.copy(recipe = request.recipe))
                     val source = store.source(request.photo)
-                    val info = sources.inspect(source)
-                    val bitmap = engine.renderSource(source,request.photo.id,info,request.recipe)
+                    val identity = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        request.photo.id+":"+source.length()+":"+source.lastModified()
+                    }
+                    val info = if (identity == inspectedIdentity) inspectedInfo!! else sources.inspect(source).also {
+                        inspectedIdentity=identity;inspectedInfo=it
+                    }
+                    val key = PreviewKey(identity,request.recipe,request.edge)
+                    val cached = previewCache[key]
+                    val images = cached ?: engine.renderPreview(source,identity,info,request.recipe,request.edge)
+                    if (request.edge == RenderPolicy.PREVIEW_LONG_EDGE) previewCache.put(key,images)
                     if (generation == request.generation) {
-                        mutableState.update { it.copy(preview = bitmap, rendering = false) }
-                        store.saveThumbnail(request.photo,bitmap)
-                        refreshLibrary()
+                        neutralRecipe = request.recipe.scanBase(); neutralPhotoId = request.photo.id
+                        mutableState.update { it.copy(preview = images.exact, previewRecipe = request.recipe,
+                            neutralPreview = images.neutral, fastAdjustments = null, rendering = false,
+                            previewCacheHit = cached != null, previewMilliseconds = SystemClock.elapsedRealtime()-request.started) }
+                        if (request.edge == RenderPolicy.PREVIEW_LONG_EDGE) {
+                            store.saveThumbnail(request.photo,images.exact)
+                            refreshLibrary()
+                            warmNeighbors(request,identity,info)
+                        }
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Throwable) {
                     if (generation == request.generation)
-                        mutableState.update { it.copy(rendering = false, error = readable(failure, "Preview processing failed")) }
+                        mutableState.update { it.copy(preview = null, neutralPreview = null, fastAdjustments = null,
+                            previewRecipe = null, rendering = false, error = readable(failure, "Preview processing failed")) }
                 }
             }
         }
@@ -321,7 +367,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (!interactive) return
         interactive = false
         history.apply(state.value.recipe)
-        publishRecipe(preview = false)
+        publishRecipe()
     }
     fun autoExposure(value: Boolean) = apply(state.value.recipe.copy(adjustments = state.value.recipe.adjustments.copy(autoExposure = value)))
     fun resetAdjustments() = apply(state.value.recipe.copy(adjustments = Adjustments()))
@@ -378,9 +424,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private fun stopPreview() {
         generation++
+        warmJob?.cancel(); warmJob = null
         engine.cancel()
         requests.value = null
-        mutableState.update { it.copy(rendering = false) }
+        mutableState.update { it.copy(rendering = false, fastAdjustments = null) }
     }
     private fun requestPreview() {
         val current = state.value
@@ -388,18 +435,51 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val input = current.original ?: return
         if (!current.ready || current.exporting) return
         val versioned = photo.copy(recipe = current.recipe,revision = photo.revision+1)
-        // Invalidate synchronously, before debounce/native work. A highlighted new
-        // recipe must never be paired with the previous recipe's rendered pixels.
-        mutableState.update { it.copy(photo = versioned, preview = null, rendering = true) }
-        // Persist edits independently of preview debounce, navigation or export.
-        viewModelScope.launch {
-            try { store.save(versioned) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { mutableState.update { it.copy(error = readable(failure,"The edit could not be saved")) } }
-        }
+        warmJob?.cancel(); warmJob = null
+        val fast = interactive && ScanPreviewShader.supported && current.neutralPreview != null &&
+            neutralPhotoId == photo.id && neutralRecipe == current.recipe.scanBase()
+        // Keep the last completed image explicitly marked as updating. Its
+        // recipe remains separate, so stale pixels never claim to be current.
+        mutableState.update { it.copy(photo = versioned, rendering = true, savingEdits = true,
+            fastAdjustments = if (fast) current.recipe.adjustments else it.fastAdjustments?.takeIf { _ ->
+                neutralPhotoId == photo.id && neutralRecipe == current.recipe.scanBase() }?.let { current.recipe.adjustments }) }
+        pendingSaves[versioned.id]=versioned;saveSignals.trySend(Unit)
         engine.cancel()
-        requests.value = PreviewRequest(++generation, versioned, input, current.recipe)
+        val token = ++generation
+        requests.value = if (fast) null else PreviewRequest(token,versioned,input,current.recipe,
+            if (interactive) 512 else RenderPolicy.PREVIEW_LONG_EDGE)
+        if (!fast) renderSignals.trySend(Unit)
     }
+
+    private fun warmNeighbors(request: PreviewRequest, identity: String,
+                              info: io.github.proleeeeeeeeee.spektralab.engine.SourceInfo) {
+        warmJob?.cancel()
+        warmJob = viewModelScope.launch {
+            delay(700)
+            if (generation != request.generation || !state.value.showEditor || state.value.exporting) return@launch
+            val index = Materials.films.indexOfFirst { it.id == request.recipe.filmId }
+            for (neighbor in listOf(index-1,index+1).mapNotNull { Materials.films.getOrNull(it) }) {
+                currentCoroutineContext().ensureActive()
+                if (generation != request.generation || previewCache.size >= 3) break
+                val recipe = request.recipe.withFilm(neighbor.id)
+                val key = PreviewKey(identity,recipe,RenderPolicy.PREVIEW_LONG_EDGE)
+                if (previewCache[key] != null) continue
+                try {
+                    val images = engine.renderPreview(store.source(request.photo),identity,info,recipe)
+                    if (generation == request.generation) previewCache.put(key,images)
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { break } // Optional warm-up never blocks editing.
+                delay(200)
+            }
+        }
+    }
+
+    fun pausePreviews() {
+        finishInteraction(); stopPreview(); previewCache.clear()
+        neutralRecipe = null; neutralPhotoId = null
+        mutableState.update { it.copy(neutralPreview = null) }
+    }
+    fun resumePreviews() { if (state.value.showEditor && state.value.ready) requestPreview() }
 
     fun export(format: ExportFormat, quality: Int) = export(ExportSettings(format = format,quality = quality))
     fun export(settings: ExportSettings) {
@@ -516,6 +596,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         failure.message?.take(600)?.ifBlank { null } ?: fallback
 
     override fun onCleared() {
+        warmJob?.cancel(); previewCache.clear(); renderSignals.close(); saveSignals.close()
         engine.close()
         super.onCleared()
     }

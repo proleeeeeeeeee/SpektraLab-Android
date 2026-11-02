@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 class MaterialPreviewStateTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    @Test fun switchingInvalidatesOldPreviewImmediatelyAndFailureCannotKeepItsPixels() {
+    @Test fun switchingRetainsLabeledPreviewAndFailureCannotKeepItsPixels() {
         val context = compose.activity
         val resolver = context.contentResolver
         val name = "material-state-${System.nanoTime()}.png"
@@ -51,9 +51,11 @@ class MaterialPreviewStateTest {
                 state.photo?.displayName == name && !state.importing && !state.rendering && state.preview != null
             }
             compose.runOnIdle {
+                val previous=model.state.value.preview
                 model.selectPaper("kodak_supra_endura")
-                assertNull("A new material must not display the previous recipe's pixels",model.state.value.preview)
-                assertTrue("Developing must start before the debounce",model.state.value.rendering)
+                assertSame("Keep a completed image while updating",previous,model.state.value.preview)
+                assertNotEquals("Previous pixels must retain their own recipe",model.state.value.recipe,model.state.value.previewRecipe)
+                assertTrue("Updating starts synchronously",model.state.value.rendering)
             }
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.preview != null }
             val stored = model.state.value.photo!!

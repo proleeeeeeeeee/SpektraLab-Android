@@ -36,6 +36,8 @@ internal fun PhotosWorkspace(
     var multiple by rememberSaveable(project.id) { mutableStateOf(false) }
     var markId by rememberSaveable(project.id) { mutableStateOf<String?>(null) }
     var deleteSelection by remember { mutableStateOf(false) }
+    var importMenu by remember { mutableStateOf(false) }
+    var reviewControls by rememberSaveable { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val latestProject by rememberUpdatedState(project)
     val latestTable by rememberUpdatedState(showLightTable)
@@ -57,6 +59,14 @@ internal fun PhotosWorkspace(
     val header: @Composable () -> Unit = {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             ProjectActions(state, model, Modifier.weight(1f), onImport, onFiles)
+            Box {
+                TextButton(onClick={importMenu=true},enabled=state.ready && !state.importing && !state.exporting,
+                    modifier=Modifier.heightIn(min=48.dp).testTag("workspace-import-menu")) { Text("+ Import") }
+                DropdownMenu(importMenu,{importMenu=false}) {
+                    DropdownMenuItem(text={Text("Photos")},onClick={importMenu=false;onImport()},modifier=Modifier.testTag("workspace-import"))
+                    DropdownMenuItem(text={Text("Files / RAW")},onClick={importMenu=false;onFiles()},modifier=Modifier.testTag("workspace-import-files"))
+                }
+            }
             TextButton(onClick = onSettings, modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-settings")) { Text("Settings") }
         }
         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -68,8 +78,11 @@ internal fun PhotosWorkspace(
             if (!showLightTable && project.photos.isNotEmpty()) TextButton(onClick = {
                 if (isSelecting) { model.clearSelection(); multiple = false } else multiple = true
             }, modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-multiselect")) { Text(if (isSelecting) "Finish selection" else "Select") }
-            Text("${visible.size} / ${project.photos.size} photos", Modifier.heightIn(min = 48.dp).wrapContentHeight(),
+            if (showLightTable || isSelecting) Text("${visible.size} / ${project.photos.size} photos", Modifier.heightIn(min = 48.dp).wrapContentHeight(),
                 style = MaterialTheme.typography.bodySmall, color = MutedColor)
+            if (!showLightTable && !isSelecting) TextButton(onClick={reviewControls=!reviewControls},modifier=Modifier.heightIn(min=48.dp).testTag("workspace-review-controls")) {
+                Text(if (light.layout.filter.active) "Filter on" else "Filter")
+            }
         }
         if (state.importing) Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -81,7 +94,7 @@ internal fun PhotosWorkspace(
             Text(light.error.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = lightModel::retry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry loading") }
         }
-        ReviewToolbar(light, lightModel, onExportSelection, onContactSheet,
+        if (showLightTable || isSelecting || reviewControls) ReviewToolbar(light, lightModel, onExportSelection, onContactSheet,
             showMarkAction = showLightTable, showPickAction = false, includePageScope = showLightTable)
         if (!showLightTable && isSelecting) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             TextButton(onClick = {
@@ -115,11 +128,11 @@ internal fun PhotosWorkspace(
         }
         if (!state.ready) Text(if (state.initializing) "Preparing local processing…" else "The processing engine is not ready. Check the message above.",
             Modifier.padding(horizontal = 16.dp), color = MutedColor, style = MaterialTheme.typography.bodySmall)
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (project.photos.isEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onImport, enabled = state.ready && !state.importing && !state.exporting,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("workspace-import")) { Text("Import photos") }
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("workspace-import-empty")) { Text("Import photos") }
             OutlinedButton(onClick = onFiles, enabled = state.ready && !state.importing && !state.exporting,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-import-files")) { Text("RAW / files") }
+                modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-files-empty")) { Text("RAW / files") }
         }
     }
     val body: @Composable (Modifier, Boolean) -> Unit = { modifier, wide ->

@@ -22,6 +22,18 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class LightTableStorageTest {
+    @Test fun legacyImplicitLoupeSettingsRemainCompatible() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val project=UUID.randomUUID().toString()
+        val directory=File(context.filesDir,"light-tables").apply { mkdirs() }
+        val file=File(directory,"$project.json")
+        try {
+            file.writeText("""{"revision":7,"layout":{"brightness":0.6}}""")
+            val restored=LightTableStore(context).load(project).layout
+            assertTrue(restored.loupeEnabled)
+            assertEquals(.7,restored.loupeX,0.0);assertEquals(.65,restored.loupeY,0.0)
+        } finally { file.delete() }
+    }
     @Test fun backgroundDuringInitialLayoutLoadCannotOverwritePersistedSettings() = runBlocking {
         val instrumentation=InstrumentationRegistry.getInstrumentation()
         val context=instrumentation.targetContext
@@ -52,13 +64,13 @@ class LightTableStorageTest {
         val previous=if (index.isFile) index.readBytes() else null
         val store=LightTableStore(context)
         try {
-            assertEquals(LightTableLayout(),store.load(project).layout)
+            assertEquals(LightTableLayout.fresh(),store.load(project).layout)
             val layout=LightTableLayout(lightOn=false,brightness=.27,loupeX=.36,loupeY=.62,zoom=4.0,
                 placements=listOf(FilmPlacement("photo",.32,.71,45.0)),selectedId="photo")
             assertTrue(store.save(project,layout,12))
             assertFalse(store.save(project,layout.copy(lightOn=true),11))
             assertEquals(SavedLightTable(12,layout),LightTableStore(context).load(project))
-            assertEquals(LightTableLayout(),store.load(second).layout)
+            assertEquals(LightTableLayout.fresh(),store.load(second).layout)
             if (previous!=null) assertArrayEquals(previous,index.readBytes()) else assertFalse(index.exists())
         } finally {
             File(context.filesDir,"light-tables/$project.json").delete()

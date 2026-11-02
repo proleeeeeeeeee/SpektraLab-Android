@@ -7,4 +7,5 @@
 #include <vector>
 
 bool android_float_render(spk_session* session, std::vector<float>& rgb,
-                          uint32_t& width, uint32_t& height, std::string& error);
+                          uint32_t& width, uint32_t& height, std::string& error,
+                          bool* negative_cache_hit = nullptr);

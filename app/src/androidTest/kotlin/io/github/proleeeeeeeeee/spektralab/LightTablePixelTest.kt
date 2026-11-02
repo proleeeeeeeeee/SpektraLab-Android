@@ -32,7 +32,7 @@ class LightTablePixelTest {
         val bitmap=Bitmap.createBitmap(512,512,Bitmap.Config.ARGB_8888)
         for (y in 0 until 512) for (x in 0 until 512) bitmap.setPixel(x,y,android.graphics.Color.rgb(x*255/511,y*255/511,70))
         val photo=StoredPhoto("sample","Coordinate photograph",width=512,height=512)
-        var layout by mutableStateOf(LightTableLayout(brightness=1.0,loupeX=.53,loupeY=.5,zoom=4.0,
+        var layout by mutableStateOf(LightTableLayout(brightness=1.0,loupeEnabled=true,loupeX=.53,loupeY=.5,zoom=4.0,
             placements=listOf(FilmPlacement("sample",.5,.5,27.0)),selectedId="sample"))
         compose.setContent { SpektraTheme {
             LightTableBoard(LightTableState(project=PhotoProject("fixture","Pixel test",listOf(photo)),layout=layout,images=mapOf("sample" to bitmap)),
@@ -47,7 +47,7 @@ class LightTablePixelTest {
             val cx=layout.loupeX*w;val cy=layout.loupeY*h
             val px=(cx+radius*.30).roundToInt();val py=(cy-radius*.10).roundToInt()
             val sample=TablePoint(cx+(px-cx)/layout.zoom,cy+(py-cy)/layout.zoom)
-            val frame=LightTableGeometry.frame(w,h,512,512);val pose=layout.placements.single()
+            val frame=LightTableGeometry.frame(w,h,512,512,1);val pose=layout.placements.single()
             val uv=requireNotNull(LightTableGeometry.photoPoint(sample,pose,frame,w,h))
             val actual=pixels[px,py]
             val red=(actual.red*255).roundToInt();val green=(actual.green*255).roundToInt()

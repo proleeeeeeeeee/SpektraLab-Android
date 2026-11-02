@@ -15,13 +15,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.proleeeeeeeeee.spektralab.core.*
 
-internal enum class WorkspacePage { PHOTOS, EDITOR, MATERIALS, NEGATIVE, SETTINGS }
+internal enum class WorkspacePage { PHOTOS, EDITOR, MATERIALS, PRESETS, NEGATIVE, SETTINGS }
 internal enum class WorkspaceOverlay { NONE, PHOTO_EXPORT, BATCH_EXPORT, PRESETS }
-internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print"), ADJUST("Adjust"), COMPOSE("Compose") }
+internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print"), FRAME("Frame"), ADJUST("Adjust"), CROP("Crop") }
 
 @Composable internal fun WorkspaceNavigation(page: WorkspacePage, enabled: Boolean, onSelect: (WorkspacePage) -> Unit) {
     NavigationBar(containerColor = PanelColor, windowInsets = WindowInsets(0, 0, 0, 0), modifier = Modifier.testTag("workspace-navigation")) {
-        listOf(Triple(WorkspacePage.PHOTOS, "Photos", "photos"), Triple(WorkspacePage.MATERIALS, "Materials", "materials"), Triple(WorkspacePage.NEGATIVE, "Tools", "tools")).forEach { (target, label, tag) ->
+        listOf(Triple(WorkspacePage.PHOTOS, "Photos", "photos"), Triple(WorkspacePage.PRESETS, "Presets", "presets"), Triple(WorkspacePage.NEGATIVE, "Negatives", "negatives")).forEach { (target, label, tag) ->
             NavigationBarItem(selected = page == target, onClick = { onSelect(target) }, enabled = enabled,
                 icon = { NavigationGlyph(target, if (page == target) AccentColor else MutedColor) }, label = { Text(label) },
                 modifier = Modifier.heightIn(min = 56.dp).testTag("nav-$tag"),
@@ -36,7 +36,7 @@ internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print")
         val stroke = Stroke(1.4f * unit)
         when (page) {
             WorkspacePage.PHOTOS -> for (x in listOf(3f, 13f)) for (y in listOf(3f, 13f)) drawRect(color, Offset(x * unit, y * unit), Size(7f * unit, 7f * unit), style = stroke)
-            WorkspacePage.MATERIALS -> {
+            WorkspacePage.PRESETS, WorkspacePage.MATERIALS -> {
                 drawRect(color, Offset(3f * unit, 3f * unit), Size(13f * unit, 15f * unit), style = stroke)
                 drawLine(color, Offset(19f * unit, 7f * unit), Offset(19f * unit, 21f * unit), 1.4f * unit)
                 drawLine(color, Offset(7f * unit, 21f * unit), Offset(19f * unit, 21f * unit), 1.4f * unit)

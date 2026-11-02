@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0-alpha.1
+
+- Replace the Materials / Tools main tabs with Presets / Negatives; keep materials in the editor and add a dedicated saved-preset library.
+- Give Frame and Crop separate editor tools, a compact top-right Export button, contextual library marks and a single import menu.
+- Retain explicitly labeled previous previews while updating, with immediate discrete requests, conflated heavy drafts and a 24 MiB recent-recipe cache.
+- Add Android 13+ GPU scan-tone drag previews, exact native correction on release, and bounded idle neighbor-film warm-up.
+- Send only changed engine fields so paper-only edits retain the negative; invalidate partial native results safely after cancellation or failed parameter updates.
+- Fit small light-table projects more generously and keep the loupe off until enabled for new layouts. Saved user placements and loupe choices remain intact.
+
 ## 0.5.0-alpha.1
 
 - Expand the catalog to 11 films and nine print materials using existing valid upstream profiles, with provenance, descriptions, comparison and verified artwork or explicit named cards.

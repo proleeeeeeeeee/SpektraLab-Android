@@ -6,7 +6,8 @@
 #include "android_engine.hpp"
 
 bool android_float_render(spk_session* session, std::vector<float>& output,
-                          uint32_t& width, uint32_t& height, std::string& error) {
+                          uint32_t& width, uint32_t& height, std::string& error,
+                          bool* negative_cache_hit) {
     if (!session) { error = "Missing render session"; return false; }
     std::lock_guard<std::mutex> guard(session->lock);
     auto* gpu = session->engine->gpu;
@@ -15,6 +16,8 @@ bool android_float_render(spk_session* session, std::vector<float>& output,
     gpu->begin_frame();
     struct EndFrame { gpu::Gpu* gpu; ~EndFrame() { gpu->end_frame(); } } end{gpu};
     const Tier* tier = find_tier("full");
+    const auto existing = session->tiers.find(tier->name);
+    if (negative_cache_hit) *negative_cache_hit = existing != session->tiers.end() && existing->second.has_negative;
     Image source,negative,rgb;
     bool ok = tier_image(session,*tier,source,error);
     if (ok) session->pipeline->set_source_shape(source.w,source.h,session->source.w,session->source.h);
