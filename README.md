@@ -2,6 +2,8 @@
 
 An unofficial, offline Android port of [SpektraLab](https://github.com/JamesQiu2005/SpektraLab), maintained by [proleeeeeeeeee](https://github.com/proleeeeeeeeee).
 
+Download the test APK and matching complete source from [Releases](https://github.com/proleeeeeeeeee/SpektraLab-Android/releases).
+
 Import a photograph, choose film and paper, add a physical film edge, and save a new photograph. Processing uses the actual upstream C++ spectral engine through Vulkan on the device. A running computer, account and network connection are not required.
 
 The first device-test build targets the Galaxy S25 Ultra (arm64, Android 10 or newer with a compatible Vulkan driver). This is an early port, not an official SpektraLab release. See [testing](docs/TESTING.md) for measured results and remaining device checks.
