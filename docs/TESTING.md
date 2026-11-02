@@ -2,6 +2,7 @@
 
 ## Version 0.5.0-alpha.1 five-feature validation: 2026-11-02
 
+- Release CI exposed a reference-fingerprint portability defect: the Windows checkout used CRLF while the pinned Git blob and Linux checkout use LF. The fingerprint now uses the pinned LF bytes and normalizes only CRLF line endings. All seven numerical packs are still checked exactly; a separate test rejects changed data. The suite now contains 63 core tests. No material/engine parameters changed.
 - The implementation accepted in local 0.5.0-dev.1 passed 62 core tests and 24 affected Android regressions (160.009 seconds runner time), with no failures or skips. Five earlier BW-grade device tests and the 60 native material combinations remain applicable; unaffected matrices were not repeated for a version-only change.
 - Negative tests cover actual touch sampling, exposure/white-balance sliders, rotation, photo switching, immutable whole-roll PNG snapshots, decoded pixels and unchanged originals. A failed capture retries through the UI after Activity stop/resume without duplicating a successful output; controlled orphan import recovery preserves indexed/queued/unknown files.
 - Actual positive-before/after-rotation screenshots and the G5 contact-sheet PDF caption were viewed. Prior real-photo contact-sheet evidence covers three fixtures repeated 13 times, 55 cell comparisons and 11 pages. Culling, layout/navigation and material comparison acceptance is recorded in [FEATURES-v05.md](FEATURES-v05.md).

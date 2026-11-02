@@ -30,7 +30,8 @@ enum class PaperGrade(
         const val PAPER_ID = "ilford_multigrade_iv_rc"
         const val FITTED_FILM_ID = "kodak_tri_x_400"
         const val ENLARGER_ILLUMINANT = "TH-KG3"
-        const val SOURCE_SHA256 = "6660cd1d6601455c1fa4fb23eaa338543dc34327636a249d59b5e7c78a0bb50d"
+        /** SHA-256 of the pinned Git blob, with LF line endings (not a host checkout). */
+        const val SOURCE_SHA256 = "a6a2f689c73b104880d965519586db7c0976027aad05b6103872537f81b76ce9"
         val supportedFilmIds: Set<String> = setOf(
             FITTED_FILM_ID, "kodak_tmax_100", "fujifilm_neopan_acros_100_ii", "ilford_hp5_plus_400",
         )

@@ -20,8 +20,7 @@ class PaperGradeTest {
         val reference = listOf(File("../$path"), File(path)).firstOrNull { it.isFile }
             ?: error("The pinned paper_grades.json must be available to verify the grade table")
         val bytes = reference.readBytes()
-        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        assertEquals(PaperGrade.SOURCE_SHA256, sha)
+        assertEquals(PaperGrade.SOURCE_SHA256, referenceFingerprint(bytes))
         val data = Json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject
         assertEquals(PaperGrade.PAPER_ID, data.getValue("paper").jsonPrimitive.content)
         assertEquals(PaperGrade.FITTED_FILM_ID, data.getValue("film").jsonPrimitive.content)
@@ -36,6 +35,18 @@ class PaperGradeTest {
             assertEquals(pack.getValue("print_exposure").jsonPrimitive.double, grade.printExposure)
         }
         assertEquals(Materials.films.filter { it.monochrome }.map { it.id }.toSet(), PaperGrade.supportedFilmIds)
+    }
+
+    private fun referenceFingerprint(bytes: ByteArray): String {
+        val canonical = bytes.toString(Charsets.UTF_8).replace("\r\n", "\n").toByteArray(Charsets.UTF_8)
+        return MessageDigest.getInstance("SHA-256").digest(canonical).joinToString("") { "%02x".format(it) }
+    }
+
+    @Test fun referenceFingerprintAcceptsCheckoutLineEndingsButRejectsChangedData() {
+        val lf = "{\"grade\":2}\n".toByteArray()
+        val crlf = "{\"grade\":2}\r\n".toByteArray()
+        assertEquals(referenceFingerprint(lf), referenceFingerprint(crlf))
+        assertNotEquals(referenceFingerprint(lf), referenceFingerprint("{\"grade\":3}\n".toByteArray()))
     }
 
     @Test fun everyGradeUsesTheSameExactPackForEachSupportedBwFilm() {
