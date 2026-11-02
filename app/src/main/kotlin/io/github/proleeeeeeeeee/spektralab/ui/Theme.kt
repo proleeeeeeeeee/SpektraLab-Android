@@ -23,8 +23,14 @@ fun SpektraTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = AccentColor, onPrimary = CanvasColor,
+            primaryContainer = Color(0xFF403A30), onPrimaryContainer = PaperWhite,
+            secondary = AccentColor, onSecondary = CanvasColor,
+            secondaryContainer = Color(0xFF3A3E3D), onSecondaryContainer = PaperWhite,
             background = CanvasColor, onBackground = PaperWhite,
             surface = PanelColor, onSurface = PaperWhite,
+            surfaceContainerLowest = CanvasColor, surfaceContainerLow = CanvasColor,
+            surfaceContainer = PanelColor, surfaceContainerHigh = Color(0xFF303435),
+            surfaceContainerHighest = Color(0xFF3A3E3D),
             surfaceVariant = Color(0xFF303435), onSurfaceVariant = MutedColor,
             outline = Color(0xFF424748), error = Color(0xFFFFB4AB),
         ),
