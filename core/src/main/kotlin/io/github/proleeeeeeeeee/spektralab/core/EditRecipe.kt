@@ -28,6 +28,8 @@ data class EditRecipe(
     val frame: FilmFrame = FilmFrame.NONE,
     val framingX: Double = 0.5,
     val framingY: Double = 0.5,
+    val adjustments: Adjustments = Adjustments(),
+    val composition: Composition = Composition(),
 ) {
     init {
         require(framingX.isFinite() && framingX in 0.0..1.0)

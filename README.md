@@ -13,6 +13,9 @@ The first device-test build targets the Galaxy S25 Ultra (arm64, Android 10 or n
 - Compatible color papers and Ilford Multigrade IV RC for black and white.
 - No frame, 135 perforations, filed 135 edge, 120 6×6 and XPan.
 - Direct selection in a horizontal Film / Paper / Frame strip.
+- Adjust exposure, automatic metering, temperature, tint, contrast, saturation, highlights and shadows.
+- Set physical grain and halation strength.
+- Free crop with draggable corners, aspect presets, 90° rotation, horizontal/vertical flips and ±15° straightening.
 - Drag to reframe, undo / redo, and hold to compare the original.
 - JPEG or PNG export into Pictures / SpektraLab.
 - Private last-edit recovery. Gallery originals are never overwritten.

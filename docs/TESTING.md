@@ -1,6 +1,16 @@
 # Testing
 
-## Recorded validation: 2026-11-02
+## Version 0.2.0-alpha.1 validation: 2026-11-02
+
+- Fifteen core tests passed, including legacy recipe decoding, input bounds, crop corner containment at ±15°, physical gate ratios and transform serialization.
+- Four Android instrumentation tests passed on the API 35 SwiftShader emulator.
+- Native tests verified reversible scan-tone grading from the retained original scan, neutral reset, true desaturation, physical exposure/grain changes, swapped output dimensions after rotation and straightened/flipped film gates.
+- The Compose workflow moved the exposure slider, undid the gesture, rotated, applied a free crop, selected paper/frame, and exported a decodable PNG.
+- Version code increases to 2 and the existing application ID/signing key are retained, allowing an in-place upgrade from the first test APK.
+
+Galaxy S25 Ultra hardware validation is still pending. Export input remains bounded to 2560 px and encoded sRGB; RAW, HDR and full-resolution output are not added in this release.
+
+## Version 0.1.0 validation: 2026-11-02
 
 - Nine core unit tests passed.
 - The real Vulkan engine smoke test passed on an Android 15 / API 35 x86_64 AOSP emulator using SwiftShader.

@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -141,6 +142,8 @@ private fun Library(state: EditorState, onImport: () -> Unit, onOpen: () -> Unit
 
 @Composable
 private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit) {
+    var tool by rememberSaveable { mutableStateOf(EditorTool.LOOKS) }
+    var cropping by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = model::showLibrary, modifier = Modifier.width(48.dp),
@@ -157,16 +160,29 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
             }
             TextButton(onClick = onExport, enabled = state.ready && !state.importing) { Text("Export") }
         }
-        PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth())
-        MaterialControls(state, model)
+        PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth(), showGrid = tool == EditorTool.COMPOSE)
+        when (tool) {
+            EditorTool.LOOKS -> MaterialControls(state, model)
+            EditorTool.ADJUST -> AdjustmentControls(state, model)
+            EditorTool.COMPOSE -> CompositionControls(state, model, onCrop = { model.finishInteraction(); cropping = true })
+        }
+        Row(Modifier.fillMaxWidth().background(PanelColor), horizontalArrangement = Arrangement.SpaceEvenly) {
+            EditorTool.entries.forEach { value ->
+                TextButton(onClick = { model.finishInteraction(); tool = value }) {
+                    Text(value.label, color = if (tool == value) AccentColor else MutedColor)
+                }
+            }
+        }
     }
+    if (cropping && state.original != null) CropSheet(state.original, state.recipe.composition.crop,
+        onCancel = { cropping = false }, onApply = { model.crop(it); cropping = false })
 }
 
 @Composable
-private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit, modifier: Modifier) {
+private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit, modifier: Modifier, showGrid: Boolean = false) {
     var compare by remember { mutableStateOf(false) }
     val photo = if (compare) state.original else state.preview ?: state.original
-    val framed = state.recipe.frame != FilmFrame.NONE
+    val framed = state.recipe.frame != FilmFrame.NONE || state.recipe.composition.aspect != CropAspect.FREE
     Column(modifier) {
         Box(Modifier.weight(1f).fillMaxWidth().background(CanvasColor).pointerInput(state.photo?.id, framed) {
             if (!framed) return@pointerInput
@@ -180,6 +196,17 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
         }, contentAlignment = Alignment.Center) {
             photo?.let { Image(it.asImageBitmap(), if (compare) "Original photograph" else "Processed photograph",
                 Modifier.fillMaxSize().padding(horizontal = 4.dp), contentScale = ContentScale.Fit) }
+            if (showGrid && photo != null && !compare) Canvas(Modifier.matchParentSize()) {
+                val scale = minOf((size.width - 8.dp.toPx()) / photo.width, size.height / photo.height)
+                val w = photo.width * scale; val h = photo.height * scale
+                val x = (size.width-w)/2; val y = (size.height-h)/2
+                for (i in 1..2) {
+                    drawLine(PaperWhite.copy(alpha = .45f), androidx.compose.ui.geometry.Offset(x+w*i/3,y),
+                        androidx.compose.ui.geometry.Offset(x+w*i/3,y+h),1.dp.toPx())
+                    drawLine(PaperWhite.copy(alpha = .45f), androidx.compose.ui.geometry.Offset(x,y+h*i/3),
+                        androidx.compose.ui.geometry.Offset(x+w,y+h*i/3),1.dp.toPx())
+                }
+            }
             if (compare) Text("Original", Modifier.align(Alignment.TopStart).padding(12.dp)
                 .background(CanvasColor.copy(alpha = .85f), RoundedCornerShape(4.dp)).padding(8.dp), fontSize = 12.sp)
         }
@@ -297,7 +324,8 @@ private fun AboutDialog(capabilities: String, onClose: () -> Unit) {
     AlertDialog(onDismissRequest = onClose, title = { Text("SpektraLab for Android") },
         text = {
             Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState())) {
-                Text("An unofficial Android port by proleeeeeeeeee.\nVersion 0.1.0 · Device test build")
+                Text("An unofficial Android port by proleeeeeeeeee.\nVersion " +
+                    io.github.proleeeeeeeeee.spektralab.BuildConfig.VERSION_NAME + " · Device test build")
                 Spacer(Modifier.height(16.dp))
                 Text("Built on SpektraLab by JamesQiu2005 and the Spektrafilm engine and profiles by Andrea Volpato. Code: GPLv3. Film and paper data: CC BY-SA 4.0.")
                 Spacer(Modifier.height(12.dp))

@@ -66,6 +66,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val requests = MutableStateFlow<PreviewRequest?>(null)
     private var generation = 0L
     private var exportJob: Job? = null
+    private var interactive = false
 
     init {
         viewModelScope.launch {
@@ -121,6 +122,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importPhoto(uri: Uri) {
         if (!state.value.ready || state.value.importing || state.value.exporting) return
+        finishInteraction()
         stopPreview()
         mutableState.update { it.copy(importing = true, error = null) }
         viewModelScope.launch {
@@ -141,12 +143,45 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun selectFilm(id: String) = apply(history.current.withFilm(id))
-    fun selectPaper(id: String) = apply(history.current.copy(paperId = id))
-    fun selectFrame(frame: FilmFrame) = apply(history.current.withFrame(frame))
+    fun selectFilm(id: String) = apply(state.value.recipe.withFilm(id))
+    fun selectPaper(id: String) = apply(state.value.recipe.copy(paperId = id))
+    fun selectFrame(frame: FilmFrame) = apply(state.value.recipe.withFrame(frame))
     fun selectTab(tab: MaterialTab) { mutableState.update { it.copy(material = tab) } }
-    fun undo() { if (!state.value.exporting) { history.undo(); publishRecipe() } }
-    fun redo() { if (!state.value.exporting) { history.redo(); publishRecipe() } }
+    fun adjust(control: Adjustment, value: Float) {
+        if (state.value.exporting || state.value.importing || state.value.photo == null) return
+        interactive = true
+        val recipe = state.value.recipe
+        mutableState.update { it.copy(recipe = recipe.copy(adjustments = control.write(recipe.adjustments, value))) }
+        requestPreview()
+    }
+    fun straighten(value: Float) {
+        if (!value.isFinite() || state.value.exporting || state.value.photo == null) return
+        interactive = true
+        mutableState.update { it.copy(recipe = it.recipe.copy(
+            composition = it.recipe.composition.copy(straighten = value.toDouble().coerceIn(-15.0,15.0)))) }
+        requestPreview()
+    }
+    fun finishInteraction() {
+        if (!interactive) return
+        interactive = false
+        history.apply(state.value.recipe)
+        publishRecipe(preview = false)
+    }
+    fun autoExposure(value: Boolean) = apply(state.value.recipe.copy(adjustments = state.value.recipe.adjustments.copy(autoExposure = value)))
+    fun resetAdjustments() = apply(state.value.recipe.copy(adjustments = Adjustments()))
+    fun resetComposition() = apply(state.value.recipe.copy(composition = Composition(), framingX = .5, framingY = .5))
+    fun crop(rect: CropRect) = apply(state.value.recipe.copy(
+        composition = state.value.recipe.composition.copy(crop = rect, aspect = CropAspect.FREE),
+        framingX = .5, framingY = .5))
+    fun aspect(value: CropAspect) = apply(state.value.recipe.copy(
+        composition = state.value.recipe.composition.copy(aspect = value), framingX = .5, framingY = .5))
+    fun rotate() = apply(state.value.recipe.copy(composition = state.value.recipe.composition.rotate()))
+    fun flip(horizontal: Boolean) {
+        val c = state.value.recipe.composition
+        apply(state.value.recipe.copy(composition = if (horizontal) c.copy(flipH = !c.flipH) else c.copy(flipV = !c.flipV)))
+    }
+    fun undo() { if (!state.value.exporting) { finishInteraction(); history.undo(); publishRecipe() } }
+    fun redo() { if (!state.value.exporting) { finishInteraction(); history.redo(); publishRecipe() } }
     fun showLibrary() { if (!state.value.exporting) mutableState.update { it.copy(showEditor = false) } }
     fun showEditor() { mutableState.update { it.copy(showEditor = true) } }
     fun dismissError() { mutableState.update { it.copy(error = null) } }
@@ -155,24 +190,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     /** A gesture commits one undo step, rather than hundreds of pointer-move steps. */
     fun moveFraming(deltaX: Double, deltaY: Double) {
-        val recipe = history.current
-        if (recipe.frame == FilmFrame.NONE) return
+        val recipe = state.value.recipe
+        if (recipe.frame == FilmFrame.NONE && recipe.composition.aspect == CropAspect.FREE) return
+        var dx = if (recipe.composition.flipH) -deltaX else deltaX
+        var dy = if (recipe.composition.flipV) -deltaY else deltaY
+        val mapped = when (recipe.composition.quarterTurns) {
+            1 -> dy to -dx; 2 -> -dx to -dy; 3 -> -dy to dx; else -> dx to dy
+        }
         apply(recipe.copy(
-            framingX = (recipe.framingX - deltaX).coerceIn(0.0, 1.0),
-            framingY = (recipe.framingY - deltaY).coerceIn(0.0, 1.0),
+            framingX = (recipe.framingX - mapped.first).coerceIn(0.0, 1.0),
+            framingY = (recipe.framingY - mapped.second).coerceIn(0.0, 1.0),
         ))
     }
     private fun apply(recipe: EditRecipe) {
         if (state.value.exporting || state.value.importing || state.value.photo == null) return
+        finishInteraction()
         if (history.apply(recipe)) publishRecipe()
     }
-    private fun publishRecipe() {
+    private fun publishRecipe(preview: Boolean = true) {
         val recipe = history.current
         mutableState.update { it.copy(
             recipe = recipe, photo = it.photo?.copy(recipe = recipe),
             canUndo = history.canUndo, canRedo = history.canRedo,
         ) }
-        requestPreview()
+        if (preview) requestPreview()
     }
     private fun stopPreview() {
         generation++
@@ -190,6 +231,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun export(format: ExportFormat, quality: Int) {
+        finishInteraction()
         val current = state.value
         val photo = current.photo ?: return
         if (!current.ready || current.exporting || current.importing) return

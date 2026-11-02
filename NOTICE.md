@@ -8,6 +8,8 @@ The Kotlin Android interface, integration code, build scripts, documentation and
 
 ## SpektraLab
 
+The Android scan-tone subset in engine/src/main/cpp/scan_tone.hpp adapts the white-balance, contrast, saturation and highlight/shadow math in upstream desktop/src/shared/adjustments.ts (itself ported from Adjustments.swift). This adaptation uses encoded sRGB, omits the remaining desktop grade controls and retains GPLv3 and the upstream attribution.
+
 This is an independent port of [SpektraLab by JamesQiu2005](https://github.com/JamesQiu2005/SpektraLab), pinned at a46627d250545a394ca21522f8a28b0fb89e4c42 in third_party/spektralab. Original authorship, copyright and source history are preserved there. The upstream engine source is not modified by this port.
 
 The upstream product-profile provenance is preserved verbatim in LICENSES/Product-profiles-NOTICE.md and included in the APK. These separately authored product data must not be misattributed to spektrafilm.

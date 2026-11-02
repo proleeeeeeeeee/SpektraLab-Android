@@ -31,7 +31,8 @@ class FilmEngine(context: Context) : AutoCloseable {
     suspend fun render(input: Bitmap, sourceKey: String, recipe: EditRecipe): Bitmap = withContext(dispatcher) {
         check(!closed && handle.get() != 0L) { "Engine is not ready" }
         require(input.width.toLong() * input.height <= RenderPolicy.MAX_DECODED_PIXELS)
-        NativeBridge.render(handle.get(), input, sourceKey, engineParameters(recipe, input.width, input.height))
+        NativeBridge.render(handle.get(), input, sourceKey, engineParameters(recipe, input.width, input.height),
+            recipe.adjustments.scanTone())
     }
     fun cancel() {
         val active = handle.get()

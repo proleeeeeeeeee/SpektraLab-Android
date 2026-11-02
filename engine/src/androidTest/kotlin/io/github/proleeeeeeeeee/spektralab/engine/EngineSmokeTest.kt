@@ -17,6 +17,43 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class EngineSmokeTest {
     @Test
+    fun scanAdjustmentsAreReversibleAndGeometryReachesTheRealEngine() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val input = Bitmap.createBitmap(320,240,Bitmap.Config.ARGB_8888)
+        for (y in 0 until 240) for (x in 0 until 320)
+            input.setPixel(x,y,Color.rgb(40+x/2,40+y/2,110))
+        val engine = FilmEngine(context)
+        try {
+            engine.initialize()
+            val recipe = EditRecipe(adjustments = Adjustments(grain = 0.0,halation = 0.0))
+            val original = engine.render(input,"editing-test",recipe)
+            val warmed = engine.render(input,"editing-test",recipe.copy(
+                adjustments = recipe.adjustments.copy(temperature = 70.0,tint = 20.0,contrast = 15.0)))
+            assertNotEquals(hash(original),hash(warmed))
+            val reset = engine.render(input,"editing-test",recipe)
+            assertEquals("Reset must use the retained ungraded scan",hash(original),hash(reset))
+            val mono = engine.render(input,"editing-test",recipe.copy(adjustments = recipe.adjustments.copy(saturation = -100.0)))
+            for (x in listOf(20,100,200)) {
+                val pixel = mono.getPixel(x,100)
+                assertEquals(Color.red(pixel),Color.green(pixel))
+                assertEquals(Color.red(pixel),Color.blue(pixel))
+            }
+            val brighter = engine.render(input,"editing-test",recipe.copy(adjustments = recipe.adjustments.copy(exposure = 1.0)))
+            assertNotEquals(hash(original),hash(brighter))
+            val grainy = engine.render(input,"editing-test",recipe.copy(adjustments = recipe.adjustments.copy(grain = 2.0)))
+            assertNotEquals("Grain amount must affect the physical render",hash(original),hash(grainy))
+            assertImage(engine.render(input,"editing-test",recipe.copy(adjustments = recipe.adjustments.copy(halation = 2.0))))
+            val rotated = engine.render(input,"editing-test",recipe.copy(composition = Composition(quarterTurns = 1,flipH = true)))
+            assertEquals(original.width,rotated.height)
+            assertEquals(original.height,rotated.width)
+            for (frame in listOf(FilmFrame.STRIP_135,FilmFrame.XPAN,FilmFrame.SQUARE_120)) {
+                val result = engine.render(input,"editing-test",recipe.copy(frame = frame,composition = Composition(
+                    crop = CropRect(.1,.1,.8,.7),straighten = 10.0,quarterTurns = 1,flipV = true)))
+                assertImage(result)
+            }
+        } finally { engine.close() }
+    }
+    @Test
     fun bundledVulkanEngineRendersStocksAndPhysicalFrames() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val input = Bitmap.createBitmap(320, 240, Bitmap.Config.ARGB_8888)

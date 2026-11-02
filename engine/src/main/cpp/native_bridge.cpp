@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "scan_tone.hpp"
 
 namespace {
 constexpr uint64_t kMaxInputPixels = 7'000'000;
@@ -21,9 +22,13 @@ struct EngineContext {
     spk_engine* engine = nullptr;
     spk_session* session = nullptr;
     std::string source_key;
+    std::string rendered_parameters;
+    spk_result cached_result{};
+    std::atomic<bool> cancelled{false};
     std::mutex render_mutex;
     std::mutex session_mutex;
     ~EngineContext() {
+        spk_result_free(&cached_result);
         if (session) spk_session_release(session);
         if (engine) spk_engine_destroy(engine);
     }
@@ -104,15 +109,23 @@ jlong create(JNIEnv* env, jobject, jstring resources) {
     }
 }
 
-jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source, jstring parameters) {
-    spk_result result{};
+jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source, jstring parameters, jfloatArray scan_tone) {
     try {
         auto context = context_for(handle);
         std::lock_guard<std::mutex> render_lock(context->render_mutex);
+        context->cancelled.store(false);
+        if (!scan_tone || env->GetArrayLength(scan_tone) != 6)
+            throw std::invalid_argument("Expected six scan adjustment values");
+        std::array<float, 6> tone_values{};
+        env->GetFloatArrayRegion(scan_tone, 0, 6, tone_values.data());
+        if (env->ExceptionCheck()) return nullptr;
+        const ScanTone tone(tone_values);
         const auto source_key = utf8(env, source, 256);
         const auto params = utf8(env, parameters, 65536);
         if (source_key.empty()) throw std::invalid_argument("Missing source identity");
         if (context->source_key != source_key || !context->session) {
+            spk_result_free(&context->cached_result);
+            context->rendered_parameters.clear();
             std::vector<float> rgb;
             AndroidBitmapInfo info{};
             {
@@ -144,12 +157,20 @@ jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source
             context->session = spk_open(context->engine, &image, params.c_str(), nullptr);
             if (!context->session) throw std::runtime_error(engine_error(context->engine, "Opening photograph failed"));
             context->source_key = source_key;
-        } else {
+        } else if (context->rendered_parameters != params) {
             if (spk_set_params(context->session, params.c_str(), nullptr) != SPK_OK)
                 throw std::runtime_error(engine_error(context->engine, "Updating film settings failed"));
         }
-        if (spk_render(context->session, "full", &result) != SPK_OK)
-            throw std::runtime_error(engine_error(context->engine, "Local film processing failed"));
+        // Retain the ungraded 16-bit scan. Moving a scan-tone slider does not
+        // re-develop the negative or grade an already graded 8-bit bitmap.
+        if (context->rendered_parameters != params || !context->cached_result.rgba16) {
+            spk_result_free(&context->cached_result);
+            context->rendered_parameters.clear();
+            if (spk_render(context->session, "full", &context->cached_result) != SPK_OK)
+                throw std::runtime_error(engine_error(context->engine, "Local film processing failed"));
+            context->rendered_parameters = params;
+        }
+        const auto& result = context->cached_result;
         const uint64_t count = uint64_t(result.width) * result.height;
         if (!result.rgba16 || count == 0 || count > kMaxOutputPixels ||
             result.row_stride_px < result.width) throw std::runtime_error("Invalid engine image dimensions");
@@ -166,23 +187,27 @@ jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source
             BitmapPixels bitmap(env, output);
             auto* bytes = static_cast<uint8_t*>(bitmap.pixels);
             for (uint32_t y = 0; y < result.height; ++y) {
+                if (context->cancelled.load()) throw std::runtime_error("Processing cancelled");
                 const auto* row = result.rgba16 + size_t(y) * result.row_stride_px * 4;
                 for (uint32_t x = 0; x < result.width; ++x) {
                     auto* pixel = bytes + size_t(y) * bitmap.info.stride + size_t(x) * 4;
-                    for (unsigned channel = 0; channel < 3; ++channel)
-                        pixel[channel] = uint8_t((uint32_t(row[x * 4 + channel]) + 128) / 257);
+                    if (tone.neutral) {
+                        for (unsigned channel = 0; channel < 3; ++channel)
+                            pixel[channel] = uint8_t((uint32_t(row[x * 4 + channel]) + 128) / 257);
+                    } else {
+                        const auto graded = tone.apply(row[x*4]/65535.f, row[x*4+1]/65535.f, row[x*4+2]/65535.f);
+                        for (unsigned channel = 0; channel < 3; ++channel)
+                            pixel[channel] = uint8_t(std::lround(graded[channel] * 255.f));
+                    }
                     pixel[3] = 255;
                 }
             }
         }
-        spk_result_free(&result);
         return output;
     } catch (const std::exception& error) {
-        spk_result_free(&result);
         throw_error(env, error.what());
         return nullptr;
     } catch (...) {
-        spk_result_free(&result);
         throw_error(env, "Unexpected native rendering failure");
         return nullptr;
     }
@@ -198,6 +223,7 @@ jstring capabilities(JNIEnv* env, jobject, jlong handle) {
 void cancel(JNIEnv* env, jobject, jlong handle) {
     try {
         auto context = context_for(handle);
+        context->cancelled.store(true);
         // Opening a source can take time. The UI cancellation signal must never
         // wait for that work; its generation check still discards a late result.
         std::unique_lock<std::mutex> lock(context->session_mutex, std::try_to_lock);
@@ -217,7 +243,7 @@ void destroy(JNIEnv*, jobject, jlong handle) {
 }
 const JNINativeMethod methods[] = {
     {const_cast<char*>("create"), const_cast<char*>("(Ljava/lang/String;)J"), reinterpret_cast<void*>(create)},
-    {const_cast<char*>("render"), const_cast<char*>("(JLandroid/graphics/Bitmap;Ljava/lang/String;Ljava/lang/String;)Landroid/graphics/Bitmap;"), reinterpret_cast<void*>(render)},
+    {const_cast<char*>("render"), const_cast<char*>("(JLandroid/graphics/Bitmap;Ljava/lang/String;Ljava/lang/String;[F)Landroid/graphics/Bitmap;"), reinterpret_cast<void*>(render)},
     {const_cast<char*>("capabilities"), const_cast<char*>("(J)Ljava/lang/String;"), reinterpret_cast<void*>(capabilities)},
     {const_cast<char*>("cancel"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(cancel)},
     {const_cast<char*>("destroy"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(destroy)},

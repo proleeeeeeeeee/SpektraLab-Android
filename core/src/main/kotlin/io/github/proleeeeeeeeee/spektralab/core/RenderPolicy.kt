@@ -29,16 +29,7 @@ object RenderPolicy {
 data class NormalizedCrop(val x: Double, val y: Double, val width: Double, val height: Double)
 
 fun cropFor(recipe: EditRecipe, width: Int, height: Int): NormalizedCrop {
-    require(width > 0 && height > 0)
-    val source = width.toDouble() / height
-    val target = recipe.frame.gateAspect(source) ?: return NormalizedCrop(0.0, 0.0, 1.0, 1.0)
-    val cropWidth = min(1.0, target / source)
-    val cropHeight = min(1.0, source / target)
-    return NormalizedCrop(
-        (1.0 - cropWidth) * recipe.framingX,
-        (1.0 - cropHeight) * recipe.framingY,
-        cropWidth, cropHeight,
-    )
+    return composedCrop(recipe, width, height)
 }
 
 /**
@@ -54,7 +45,12 @@ fun engineParameters(recipe: EditRecipe, width: Int, height: Int): String {
         put("input_cctf_decoding", true)
         put("output_color_space", "sRGB")
         put("output_cctf_encoding", true)
-        put("auto_exposure", true)
+        put("auto_exposure", recipe.adjustments.autoExposure)
+        put("exposure_compensation_ev", recipe.adjustments.exposure)
+        put("grain_active", recipe.adjustments.grain > 0)
+        put("grain_amount", recipe.adjustments.grain)
+        put("halation_active", recipe.adjustments.halation > 0)
+        put("halation_amount", recipe.adjustments.halation)
         put("auto_exposure_method", "balanced")
         put("preview_long_edge", RenderPolicy.PREVIEW_LONG_EDGE)
         if (Materials.film(recipe.filmId).monochrome) {
@@ -68,6 +64,10 @@ fun engineParameters(recipe: EditRecipe, width: Int, height: Int): String {
         put("geometry_crop_y", crop.y)
         put("geometry_crop_w", crop.width)
         put("geometry_crop_h", crop.height)
+        put("geometry_rotation_deg", recipe.composition.straighten)
+        put("geometry_quarter_turns", recipe.composition.quarterTurns)
+        put("geometry_flip_h", recipe.composition.flipH)
+        put("geometry_flip_v", recipe.composition.flipV)
         put("overscan_active", recipe.frame != FilmFrame.NONE)
         put("overscan_format", recipe.frame.engineFormat ?: "135")
         put("overscan_mode", if (recipe.frame.filed) "filed" else "strip")

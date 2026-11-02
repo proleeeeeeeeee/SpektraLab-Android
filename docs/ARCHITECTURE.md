@@ -16,6 +16,16 @@ The system picker grants access to one content URI. A bounded stream copies it t
 
 Only the current private import is retained. A small AtomicFile stores its recipe. There is no gallery scan, remote resource loading, analytics, account, server or WebView. The signed APK supplies all native resources.
 
+## Adjustments and composition
+
+Exposure compensation, auto exposure, grain and halation use the upstream physical engine parameters. Temperature/tint, contrast, saturation and highlight/shadow controls form a scan-tone stage adapted from the upstream desktop reference. Android applies this subset to encoded sRGB, with the same native function for preview and export, before converting the retained RGBA16 scan to 8-bit output. It does not claim parity with the desktop's ProPhoto working-space grade.
+
+The native adapter retains one ungraded scan. Scan-tone-only edits reuse it, avoiding a spectral re-render and avoiding cumulative grading of an 8-bit preview. A changed source or physical recipe invalidates it. Cancellation is checked during scan conversion; all cached texture ownership stays on the serial engine dispatcher.
+
+Slider gestures preview draft recipes and commit one history entry on release. Crop-sheet changes remain local until Apply crop; Cancel discards them. Serialized defaults preserve edits made by version 0.1.
+
+Crop rectangles refer to the original source. Aspect presets fit inside that rectangle; an active film frame owns the physical gate ratio. Straightening shrinks the effective crop until every rotated corner lies inside the source. The engine then turns and flips the crop, before producing the physical scan. Geometry parameters are shared by preview and export.
+
 ## Export
 
 Export snapshots the recipe, pauses preview, decodes the private source at the export budget, renders a separate native source identity and encodes through Android. A MediaStore row remains pending until compression completes. Failure or cancellation deletes the incomplete row. The original gallery item is never opened for writing.

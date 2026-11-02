@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.provider.MediaStore
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.proleeeeeeeeee.spektralab.core.FilmFrame
@@ -48,6 +49,22 @@ class PhotoWorkflowTest {
                     state.error != null
             }
             assertNull(model.state.value.error)
+            compose.onNodeWithText("Adjust", useUnmergedTree = true).performClick()
+            compose.onNodeWithContentDescription("Exposure adjustment", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(0.75f) }
+            compose.runOnIdle { model.finishInteraction() }
+            assertEquals(.75,model.state.value.recipe.adjustments.exposure,.01)
+            compose.onNodeWithContentDescription("Undo", useUnmergedTree = true).performClick()
+            assertEquals(0.0,model.state.value.recipe.adjustments.exposure,.01)
+            compose.onNodeWithText("Compose", useUnmergedTree = true).performClick()
+            compose.onNodeWithText("Rotate 90°", useUnmergedTree = true).performClick()
+            assertEquals(1,model.state.value.recipe.composition.quarterTurns)
+            compose.onNodeWithText("Free crop", useUnmergedTree = true).performClick()
+            compose.onNodeWithContentDescription("Crop width", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(.7f) }
+            compose.onNodeWithText("Apply crop", useUnmergedTree = true).performClick()
+            assertEquals(.7,model.state.value.recipe.composition.crop.width,.01)
+            compose.onNodeWithText("Looks", useUnmergedTree = true).performClick()
             compose.onNodeWithText("Paper", useUnmergedTree = true).performClick()
             compose.onNodeWithText("Vision 2383", useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithText("Frame", useUnmergedTree = true).performClick()

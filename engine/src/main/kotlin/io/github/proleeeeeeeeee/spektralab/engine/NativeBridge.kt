@@ -10,7 +10,7 @@ import androidx.annotation.Keep
 internal object NativeBridge {
     init { System.loadLibrary("spektralab_android") }
     external fun create(resources: String): Long
-    external fun render(handle: Long, input: Bitmap, sourceKey: String, parameters: String): Bitmap
+    external fun render(handle: Long, input: Bitmap, sourceKey: String, parameters: String, scanTone: FloatArray): Bitmap
     external fun capabilities(handle: Long): String
     external fun cancel(handle: Long)
     external fun destroy(handle: Long)
