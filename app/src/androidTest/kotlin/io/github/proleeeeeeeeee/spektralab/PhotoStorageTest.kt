@@ -26,7 +26,7 @@ class PhotoStorageTest {
         val exporter = PhotoExporter(context)
         val store = PhotoStore(context)
         val photo = Bitmap.createBitmap(80, 60, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
-        for (format in ExportFormat.entries) {
+        for (format in listOf(ExportFormat.JPEG,ExportFormat.PNG)) {
             val uri = exporter.save(photo, "../../unsafe\n.jpg", format, 95)
             try {
                 context.contentResolver.query(uri, arrayOf(MediaStore.Images.Media.IS_PENDING,

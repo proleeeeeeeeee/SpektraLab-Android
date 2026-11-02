@@ -22,6 +22,8 @@ Original spektrafilm profiles, baked constants, LUTs and direct derivatives reta
 
 ## Other bundled components
 
+LibRaw 0.22.2 is pinned at b93f6e45c194f5df9b02a43b1af9a54b4f41f33f in third_party/libraw. Copyright belongs to LibRaw LLC and its credited contributors. This port uses the LGPL-2.1 option of LibRaw's dual license. The unmodified COPYRIGHT and LICENSE.LGPL are bundled in the APK; complete corresponding source and build scripts, including both pinned submodules, accompany every APK release. No optional proprietary RAW SDK is linked.
+
 The native engine incorporates volk (MIT), stb (MIT or public domain), Liberation Sans (SIL Open Font License 1.1) and DejaVu Sans Mono (the bundled DejaVu/Bitstream notices). Their full notices are preserved in LICENSES and in APK assets. Font data used for physical edge text is pinned with upstream; no external fonts are parsed.
 
 The application uses AndroidX/Jetpack Compose, Kotlin, kotlinx.coroutines and kotlinx.serialization, with their respective upstream licenses. Gradle wrapper files retain their Apache-2.0 notices. Third-party authors are credited, not added as repository collaborators.

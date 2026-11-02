@@ -20,7 +20,7 @@ struct ScanTone {
             neutral = neutral && values[i] == 0.f;
         }
     }
-    std::array<float, 3> apply(float r, float g, float b) const {
+    std::array<float, 3> apply(float r, float g, float b, bool hdr = false) const {
         r *= 1.f + .0018f * values[0];
         g *= 1.f - .0012f * values[1];
         b *= 1.f - .0018f * values[0];
@@ -31,7 +31,7 @@ struct ScanTone {
         b = (b - mid) * contrast + mid;
         const auto luma = [](float x, float y, float z) { return .2126f*x + .7152f*y + .0722f*z; };
         const float l = luma(r,g,b);
-        const float position = l <= mid ? .5f*l/mid : .5f + .5f*(l-mid)/(1.f-mid);
+        const float position = std::clamp(l <= mid ? .5f*l/mid : .5f + .5f*(l-mid)/(1.f-mid),0.f,1.f);
         const float shadow = values[5] * .0025f * (1.f-position) * (1.f-position);
         r += shadow * (1.f-r); g += shadow * (1.f-g); b += shadow * (1.f-b);
         const float highlight = values[4] * .0025f * position * position;
@@ -41,8 +41,9 @@ struct ScanTone {
             r += highlight*r; g += highlight*g; b += highlight*b;
         }
         const float grey = luma(r,g,b), saturation = 1.f + .01f * values[3];
-        return {std::clamp(grey+(r-grey)*saturation,0.f,1.f),
-                std::clamp(grey+(g-grey)*saturation,0.f,1.f),
-                std::clamp(grey+(b-grey)*saturation,0.f,1.f)};
+        const float ceiling = hdr ? 8.f : 1.f;
+        return {std::clamp(grey+(r-grey)*saturation,0.f,ceiling),
+                std::clamp(grey+(g-grey)*saturation,0.f,ceiling),
+                std::clamp(grey+(b-grey)*saturation,0.f,ceiling)};
     }
 };

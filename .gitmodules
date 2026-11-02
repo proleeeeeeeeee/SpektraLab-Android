@@ -1,3 +1,6 @@
 [submodule "third_party/spektralab"]
 	path = third_party/spektralab
 	url = https://github.com/JamesQiu2005/SpektraLab.git
+[submodule "third_party/libraw"]
+	path = third_party/libraw
+	url = https://github.com/LibRaw/LibRaw.git

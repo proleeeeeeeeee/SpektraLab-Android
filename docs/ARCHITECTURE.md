@@ -2,7 +2,7 @@
 
 ## Boundaries
 
-The Android layer does not reproduce or approximate the spectral material model. It feeds encoded sRGB float RGB into the upstream C ABI and receives encoded sRGB RGBA16. The JNI adapter rounds that result into an opaque Android ARGB_8888 bitmap for display and export. No color matrix or decorative overlay stands in for the engine.
+The Android layer does not reproduce or approximate the spectral material model. It feeds encoded sRGB float RGB, or developed linear ProPhoto RGB for RAW, into the upstream C ABI. An additive translation unit includes the pinned engine implementation and reads its completed float scan before RGBA16 materialization/clamping. Display rounds that scan to opaque ARGB_8888; TIFF quantizes it once to RGB16. No color matrix or decorative overlay stands in for the engine.
 
 The native engine, shaders and profiles are pinned together at upstream revision a46627d250545a394ca21522f8a28b0fb89e4c42. The upstream submodule is unmodified. Native builds retain strict floating-point settings, including disabled fast math and contraction.
 
@@ -12,13 +12,13 @@ The ViewModel serializes UI events on Main and stores small immutable recipes. F
 
 One executor owns the Vulkan engine and its cached session. Preview requests are debounced and use collectLatest plus generation checks to reject stale results. Cancellation signals the native session; queued work and destruction stay ordered. The JNI registry exposes opaque IDs, retains in-flight ownership, and validates dimensions, strides, types and output limits.
 
-The system picker grants access to one content URI. A bounded stream copies it to a UUID-named private file. ImageDecoder checks the header and sets a target size before allocation, handles image orientation and converts to sRGB. Untrusted display names are never used as filesystem paths.
+The system photo/document picker grants selected content URIs. A bounded stream copies each to a UUID-named private file. LibRaw develops supported RAWs at full size with as-shot WB, no automatic brightening and linear RGB16 ProPhoto. The NDK ImageDecoder decodes ordinary images into client-owned RGBA_F16 sRGB memory at the requested size. Header dimensions, byte counts and memory admission are checked before large work. Untrusted display names are never used as filesystem paths.
 
-Only the current private import is retained. A small AtomicFile stores its recipe. There is no gallery scan, remote resource loading, analytics, account, server or WebView. The signed APK supplies all native resources.
+An AtomicFile index owns named projects, photo metadata/recipes, presets and export-queue snapshots. A Mutex serializes changes. Revision numbers reject stale preview writes, and an absent indexed photo cannot be resurrected by a late render. Version 0.1/0.2 last-edit storage migrates without deleting the private original. Files are deleted only after the updated index is committed. Limits bound index bytes, photo/project/preset/job counts and import size. There is no gallery scan, remote resource loading, analytics, account, server or WebView. The APK supplies all native resources.
 
 ## Adjustments and composition
 
-Exposure compensation, auto exposure, grain and halation use the upstream physical engine parameters. Temperature/tint, contrast, saturation and highlight/shadow controls form a scan-tone stage adapted from the upstream desktop reference. Android applies this subset to encoded sRGB, with the same native function for preview and export, before converting the retained RGBA16 scan to 8-bit output. It does not claim parity with the desktop's ProPhoto working-space grade.
+Exposure compensation, auto exposure, grain and halation use the upstream physical engine parameters. Temperature/tint, contrast, saturation and highlight/shadow controls form a scan-tone stage adapted from the upstream desktop reference. Android applies this subset to encoded sRGB with the same native function for preview and export, before output quantization. HDR permits values above SDR white through this stage. It does not claim parity with the desktop's ProPhoto working-space grade.
 
 The native adapter retains one ungraded scan. Scan-tone-only edits reuse it, avoiding a spectral re-render and avoiding cumulative grading of an 8-bit preview. A changed source or physical recipe invalidates it. Cancellation is checked during scan conversion; all cached texture ownership stays on the serial engine dispatcher.
 
@@ -28,9 +28,11 @@ Crop rectangles refer to the original source. Aspect presets fit inside that rec
 
 ## Export
 
-Export snapshots the recipe, pauses preview, decodes the private source at the export budget, renders a separate native source identity and encodes through Android. A MediaStore row remains pending until compression completes. Failure or cancellation deletes the incomplete row. The original gallery item is never opened for writing.
+Export snapshots the recipe and size, pauses preview and renders the private source at that exact requested size. Original uses the full decoded source. A conservative admission budget accounts for source, negative, staging, render arenas and readback; GPU limits can also reject a job. Nothing silently changes the chosen resolution. Full sessions are released after each job; there is no unsupported independent-tile approximation of spatial effects.
 
-The first build deliberately processes at a 2560 px input long edge. Full-resolution work should be introduced only with a measured memory budget and a supported tiled upstream path; do not silently remove the limit.
+TIFF is baseline little-endian uncompressed RGB16 with the pinned sRGB ICC profile and row-streamed quantization from float. JPEG/PNG compress native pixel memory through Android's NDK API, avoiding an extra full-size Java Bitmap. Ultra HDR renders SDR and the paper's calibrated EDR response with the same geometry/negative, computes a quarter-size RGB gain map from the edited linear-light ratios, then uses Android 14 Gainmap JPEG encoding. Unsupported paper calibrations fail explicitly. The camera's original gain map is not retained as a scene-linear input path, and the editor remains an SDR preview.
+
+A completed private cache file is copied into a pending MediaStore row. Publication exposes it only after the copy completes; failure or cancellation removes the pending entry. Batch jobs persist immutable recipe/format/size snapshots and run serially. A pending URI is recorded before copying, enabling recovery to distinguish already-published output from unfinished work and avoid duplicate retries. Failed photos do not prevent subsequent jobs. App termination pauses work; resume is explicit, not a background-service promise. Gallery originals are never opened for writing.
 
 ## Extending
 

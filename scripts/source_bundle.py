@@ -18,16 +18,29 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    pin = git(root, "rev-parse", "HEAD:third_party/spektralab").decode().strip()
-    upstream = root / "third_party" / "spektralab"
-    if git(upstream, "rev-parse", "HEAD").decode().strip() != pin:
-        raise SystemExit("The upstream checkout does not match the committed gitlink.")
+    repositories = [(root, "")]
+    revisions = []
+    # Include every pinned dependency, including LibRaw. GitHub's automatic
+    # source ZIP omits gitlink contents and is not complete corresponding source.
+    for repository, directory in repositories:
+        for entry in git(repository,"ls-tree","-r","HEAD").decode().splitlines():
+            metadata, path = entry.split("\t",1)
+            mode, kind, pin = metadata.split()
+            if mode != "160000":
+                continue
+            dependency = repository / path
+            if git(dependency,"rev-parse","HEAD").decode().strip() != pin:
+                raise SystemExit("Dependency does not match its committed gitlink: " + directory + path)
+            if git(dependency,"status","--porcelain","--untracked-files=no").strip():
+                raise SystemExit("Dependency has uncommitted changes: " + directory + path)
+            repositories.append((dependency,directory+path+"/"))
+            revisions.append(directory+path+" "+pin)
     if git(root, "status", "--porcelain", "--untracked-files=no").strip():
         raise SystemExit("Commit tracked changes before packaging matching source.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     prefix = "SpektraLab-Android/"
     with zipfile.ZipFile(args.output, "w", zipfile.ZIP_DEFLATED) as output:
-        for repository, directory in ((root, ""), (upstream, "third_party/spektralab/")):
+        for repository, directory in repositories:
             archive = git(repository, "archive", "--format=zip", "HEAD")
             with zipfile.ZipFile(io.BytesIO(archive)) as source:
                 for entry in source.infolist():
@@ -38,7 +51,7 @@ def main() -> None:
                         target.compress_type = zipfile.ZIP_DEFLATED
                         output.writestr(target, source.read(entry))
         output.writestr(prefix + "SOURCE_REVISION.txt",
-                        git(root, "rev-parse", "HEAD").decode() + "upstream " + pin + "\n")
+                        git(root, "rev-parse", "HEAD").decode() + "\n".join(revisions) + "\n")
     print(args.output)
 
 

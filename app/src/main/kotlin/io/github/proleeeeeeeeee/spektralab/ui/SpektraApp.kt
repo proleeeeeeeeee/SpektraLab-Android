@@ -49,20 +49,26 @@ fun SpektraApp(viewModel: EditorViewModel) {
     val context = LocalContext.current
     var exportOptions by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let(viewModel::importPhoto)
+    var presets by rememberSaveable { mutableStateOf(false) }
+    var batch by rememberSaveable { mutableStateOf(false) }
+    var useCurrentLook by rememberSaveable { mutableStateOf(false) }
+    val multiplePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(100)) {
+        viewModel.importPhotos(it)
     }
-    val import = {
-        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
+        viewModel.importPhotos(it)
     }
     BackHandler(state.showEditor && !state.exporting) { viewModel.showLibrary() }
     SpektraTheme {
         Surface(Modifier.fillMaxSize(), color = CanvasColor) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 if (state.showEditor && state.original != null) {
-                    Editor(state, viewModel, onExport = { exportOptions = true })
+                    Editor(state, viewModel, onExport = { exportOptions = true },onPresets = { presets = true })
                 } else {
-                    Library(state, onImport = import, onOpen = viewModel::showEditor, onAbout = { about = true })
+                    ProjectLibrary(state,viewModel,
+                        onImport = { multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onFiles = { files.launch(arrayOf("image/*","application/octet-stream")) },
+                        onAbout = { about = true },onPresets = { presets = true },onBatch = { batch = true })
                 }
             }
             if (state.error != null) AlertDialog(
@@ -78,24 +84,51 @@ fun SpektraApp(viewModel: EditorViewModel) {
                 text = { Text("Find your photograph in Pictures / SpektraLab. Your original is unchanged.") },
                 confirmButton = { TextButton(onClick = {
                     val uri = state.savedUri ?: return@TextButton
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "image/*")
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri) ?: "image/*")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }.onFailure {
+                        android.widget.Toast.makeText(context,"Saved successfully. Install a compatible viewer for this format.",android.widget.Toast.LENGTH_LONG).show()
+                    }
                     viewModel.dismissSaved()
                 }) { Text("Open in Photos") } },
                 dismissButton = { TextButton(onClick = viewModel::dismissSaved) { Text("Continue editing") } },
             )
             if (exportOptions) ModalBottomSheet(onDismissRequest = { exportOptions = false }) {
-                ExportOptions { format, quality ->
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                ExportOptions { settings ->
                     exportOptions = false
-                    viewModel.export(format, quality)
+                    viewModel.export(settings)
+                }
                 }
             }
+            if (batch) ModalBottomSheet(onDismissRequest = { batch = false }) {
+                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                    Row(Modifier.padding(horizontal = 24.dp),verticalAlignment = Alignment.CenterVertically) {
+                        Text("Use current look for every photograph",Modifier.weight(1f),fontSize = 13.sp)
+                        Checkbox(useCurrentLook,{ useCurrentLook = it })
+                    }
+                    if (state.library.queue.jobs.isNotEmpty()) {
+                        Row(Modifier.padding(horizontal = 16.dp)) {
+                            TextButton(onClick = { batch = false; viewModel.resumeBatch() },enabled = state.library.queue.pending > 0) { Text("Resume queue") }
+                            TextButton(onClick = { batch = false; viewModel.retryFailedBatch() },enabled = state.library.queue.failed > 0) { Text("Retry failed") }
+                            TextButton(onClick = viewModel::clearQueue) { Text("Clear queue") }
+                        }
+                        state.library.queue.jobs.filter { it.error != null }.forEach { job ->
+                            Text(job.error.orEmpty(),Modifier.padding(horizontal = 24.dp),fontSize = 12.sp,color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    ExportOptions { settings -> batch = false; viewModel.startBatch(settings,useCurrentLook) }
+                }
+            }
+            if (presets) PresetDialog(state,viewModel) { presets = false }
+            if (state.notice != null) AlertDialog(onDismissRequest = viewModel::dismissNotice,
+                text = { Text(state.notice.orEmpty()) },confirmButton = { TextButton(onClick = viewModel::dismissNotice) { Text("OK") } })
             if (state.exporting) AlertDialog(
                 onDismissRequest = {},
-                title = { Text("Saving photograph") },
+                title = { Text(if (state.batchRunning) "Batch export" else "Saving photograph") },
                 text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                    Text("Processing locally. Keep the app open.")
+                    Text(if (state.batchRunning) state.library.queue.completed.toString()+" / "+state.library.queue.jobs.size+
+                        " saved. Keep the app open." else "Processing locally. Keep the app open.")
                 } },
                 confirmButton = { TextButton(onClick = viewModel::cancelExport) { Text("Cancel") } },
             )
@@ -104,46 +137,14 @@ fun SpektraApp(viewModel: EditorViewModel) {
     }
 }
 
-@Composable
-private fun Library(state: EditorState, onImport: () -> Unit, onOpen: () -> Unit, onAbout: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Row(Modifier.fillMaxWidth().height(72.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("SpektraLab", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            TextButton(onClick = onAbout) { Text("About", color = MutedColor) }
-        }
-        Spacer(Modifier.height(18.dp))
-        Text("A photograph.\nA different feeling.", style = MaterialTheme.typography.headlineLarge)
-        Spacer(Modifier.height(14.dp))
-        Text("Film, paper and the edge of the frame.", color = MutedColor)
-        Spacer(Modifier.height(28.dp))
-        if (state.original != null) {
-            Box(Modifier.weight(1f).fillMaxWidth().clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
-                Image((state.preview ?: state.original).asImageBitmap(), "Continue editing " + state.photo?.displayName,
-                    Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-            }
-            TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Continue editing") }
-        } else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (state.initializing) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.height(16.dp))
-                Text("Preparing the darkroom", color = MutedColor)
-            } else Text("Choose a photograph to begin.", color = MutedColor)
-        }
-        Button(onClick = onImport, enabled = state.ready && !state.importing,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = PaperWhite, contentColor = CanvasColor)) {
-            if (state.importing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            else Text("Import photograph")
-        }
-        Text("Your photographs stay on this device.", Modifier.padding(vertical = 20.dp).align(Alignment.CenterHorizontally),
-            color = MutedColor, fontSize = 12.sp)
-    }
-}
 
 @Composable
-private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit) {
+private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit) {
     var tool by rememberSaveable { mutableStateOf(EditorTool.LOOKS) }
     var cropping by rememberSaveable { mutableStateOf(false) }
+    var more by rememberSaveable { mutableStateOf(false) }
+    var savePreset by remember { mutableStateOf(false) }
+    var includeComposition by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = model::showLibrary, modifier = Modifier.width(48.dp),
@@ -172,10 +173,17 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
                     Text(value.label, color = if (tool == value) AccentColor else MutedColor)
                 }
             }
+            TextButton(onClick = { model.finishInteraction(); more = true }) { Text("More",color = MutedColor) }
         }
     }
     if (cropping && state.original != null) CropSheet(state.original, state.recipe.composition.crop,
         onCancel = { cropping = false }, onApply = { model.crop(it); cropping = false })
+    if (more) EditorMoreSheet(state,model,includeComposition,{ includeComposition = it },
+        onClose = { more = false },onSavePreset = { more = false; savePreset = true },
+        onPresets = { more = false; onPresets() })
+    if (savePreset) NameDialog("Save preset",onClose = { savePreset = false }) {
+        model.savePreset(it,includeComposition); savePreset = false
+    }
 }
 
 @Composable
@@ -285,25 +293,40 @@ private fun Choice(id: String, brand: String, name: String, selected: Boolean,
 }
 
 @Composable
-private fun ExportOptions(onSave: (ExportFormat, Int) -> Unit) {
+private fun ExportOptions(onSave: (ExportSettings) -> Unit) {
     var format by rememberSaveable { mutableStateOf(ExportFormat.JPEG) }
     var quality by rememberSaveable { mutableFloatStateOf(95f) }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+    var resolution by rememberSaveable { mutableStateOf(ExportSize.COMPACT) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
         Text("Export photograph", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ExportFormat.entries.forEach { value ->
-                FilterChip(selected = format == value, onClick = { format = value }, label = { Text(value.name) })
+                FilterChip(selected = format == value, onClick = { format = value },
+                    enabled = value != ExportFormat.HDR_JPEG || android.os.Build.VERSION.SDK_INT >= 34,
+                    label = { Text(when (value) { ExportFormat.TIFF16 -> "TIFF · 16-bit";ExportFormat.HDR_JPEG -> "Ultra HDR";else -> value.name }) })
             }
         }
-        if (format == ExportFormat.JPEG) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExportSize.entries.forEach { value ->
+                FilterChip(selected = resolution == value,onClick = { resolution = value },label = { Text(value.label) })
+            }
+        }
+        if (format == ExportFormat.JPEG || format == ExportFormat.HDR_JPEG) {
             Text("Quality " + quality.toInt(), color = MutedColor)
             Slider(value = quality, onValueChange = { quality = it }, valueRange = 60f..100f, steps = 39)
         }
-        Text("Up to 2560 px before the film edge. sRGB.\nSaved to Pictures / SpektraLab.",
+        val description = when (format) {
+            ExportFormat.TIFF16 -> "16-bit RGB from the float scan. Embedded sRGB profile. Larger, uncompressed files."
+            ExportFormat.HDR_JPEG -> "Calibrated HDR print with a new gain map. Android 14+ and a supported color paper. The editor shows the SDR base."
+            else -> "8-bit sRGB."
+        }
+        Text(description+"\n"+if (resolution == ExportSize.ORIGINAL)
+            "Full source pixels before crop and film edge. Memory and GPU limits apply; never silently resized.\nSaved to Pictures / SpektraLab."
+            else "Up to "+resolution.label+" before crop and film edge.\nSaved to Pictures / SpektraLab.",
             color = MutedColor, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(22.dp))
-        Button(onClick = { onSave(format, quality.toInt()) }, Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        Button(onClick = { onSave(ExportSettings(format,resolution,quality.toInt())) }, Modifier.fillMaxWidth().heightIn(min = 52.dp),
             shape = RoundedCornerShape(10.dp)) { Text("Save photograph") }
         Spacer(Modifier.height(24.dp))
     }
@@ -329,7 +352,7 @@ private fun AboutDialog(capabilities: String, onClose: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Text("Built on SpektraLab by JamesQiu2005 and the Spektrafilm engine and profiles by Andrea Volpato. Code: GPLv3. Film and paper data: CC BY-SA 4.0.")
                 Spacer(Modifier.height(12.dp))
-                Text("Processing is entirely on this device. No network permission, analytics or account. Only your selected photograph is copied into private storage; the last edit is restored when you return.")
+                Text("Processing is entirely on this device. No network permission, analytics or account. Selected originals, projects and presets are stored privately. Batch queues can be resumed after reopening the app.")
                 TextButton(onClick = {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/proleeeeeeeeee/SpektraLab-Android")))
                 }) { Text("Source code") }

@@ -1,5 +1,20 @@
 # Testing
 
+## Version 0.3.0-alpha.1 validation: 2026-11-02
+
+- Eighteen core tests cover recipe compatibility/geometry, optional composition transfers, preset/queue serialization, format names and input bounds.
+- Eight Android instrumentation tests run the real Vulkan engine on API 35 SwiftShader, with no skipped cases.
+- A generated 3000 × 64 RGB16 PNG exports at Original width 3000 in JPEG, PNG, TIFF16 and Ultra HDR, beyond the old 2560 px limit.
+- TIFF checks read actual BitsPerSample, ICC and unsigned samples: more than 256 distinct levels and values that are not an 8-bit-to-16-bit expansion.
+- Ultra HDR checks reopen the JPEG, find a gain map with spatial variation and highlight ratios above 1, and verify gain-map preservation after encoding.
+- All four formats publish complete MediaStore rows with their actual MIME types and unchanged encoded bytes.
+- A generated uncompressed Bayer DNG, with no JPEG thumbnail, is recognized as RAW, developed at 128 × 96 and rendered into RGB16 TIFF from its full sensor pixels.
+- Project tests restore multiple photos, presets, copied settings and a RUNNING queue from disk, retain target composition, and reject stale writes or resurrection after deletion.
+- The batch workflow imports two photographs, copies settings, saves a preset, cancels/resumes and verifies exactly one published PNG per job.
+- Existing material/frame, adjustment/composition, privacy, storage and Activity-recreation workflows remain covered.
+
+This is emulator validation, not a measurement of S25 Ultra RAW compatibility, Adreno memory limits or HDR panel/gallery appearance. No desktop color-parity claim is made. Original is subject to explicit memory/GPU limits; 50 MP/200 MP full-size processing is not guaranteed. The camera gain map is not retained as a separate scene-linear HDR source path. Standard PNG/JPEG remain 8-bit; RAW is input only. Keep the app open for processing and resume unfinished batch jobs after reopening it.
+
 ## Version 0.2.0-alpha.1 validation: 2026-11-02
 
 - Fifteen core tests passed, including legacy recipe decoding, input bounds, crop corner containment at ±15°, physical gate ratios and transform serialization.
@@ -22,7 +37,7 @@ Galaxy S25 Ultra hardware validation is still pending. Export input remains boun
 - Synthetic 135, filed 135, 120 and XPan render files were visually inspected.
 - Manual emulator review imported a 4068 × 6102 JPEG through the actual system picker, rendered a portrait 135 strip and saved a complete 2472 × 2672 JPEG at the export budget. The personal review photograph is not included in this repository or public release assets.
 
-These results establish an initial working emulator port, not Galaxy S25 Ultra driver/performance validation. The first APK deliberately retains the 2560 px export-input budget.
+These historical version-0.1 results establish an initial working emulator port, not Galaxy S25 Ultra driver/performance validation. That APK deliberately retained the 2560 px export-input budget.
 
 ## Automated checks
 
@@ -49,9 +64,12 @@ The developer does not yet have a connected S25 Ultra. Compilation or an emulato
 - Inspect 135 perforations and edge lettering, 120 6×6 and XPan.
 - Drag the photograph inside a frame; undo and redo the framing.
 - Hold original and release; check that edited preview returns.
-- Save JPEG and PNG, open them in Samsung Gallery and check the film edge.
+- Save JPEG, PNG, RGB16 TIFF and Ultra HDR. Check MIME/size, film edges and HDR rendering in a compatible viewer; TIFF may require a separate viewer.
+- Try an S25 Ultra Expert RAW DNG. Record camera mode/compression and error details if unsupported; never accept a thumbnail as a RAW-development success.
+- Check 2560/4096/Original with a standard photo; oversized Original jobs should explain the memory/GPU limit without silently shrinking.
+- Create projects and presets, copy settings with/without composition, select multiple photographs and batch export. Force-stop during a batch, reopen and Resume; published jobs must not duplicate.
 - Cancel an export; verify that no incomplete gallery item remains.
 - Rotate, leave/reopen and relaunch the app; check last-edit recovery.
 - Compare phone output against desktop output using the same input, recipe and size before making claims of visual parity.
 
-This build does not claim full-resolution processing, HDR preservation, RAW decoding or color parity with a calibrated desktop display.
+Device checks remain required even when all automated tests pass.

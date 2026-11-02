@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 proleeeeeeeeee
+// Additive adapter around the pinned SpektraLab C ABI. Its original source,
+// notices and authorship remain in third_party/spektralab.
+#include "pipeline/engine.cpp"
+#include "android_engine.hpp"
+
+bool android_float_render(spk_session* session, std::vector<float>& output,
+                          uint32_t& width, uint32_t& height, std::string& error) {
+    if (!session) { error = "Missing render session"; return false; }
+    std::lock_guard<std::mutex> guard(session->lock);
+    auto* gpu = session->engine->gpu;
+    session->progress = Progress{};
+    session->progress.progress_id = "android-float";
+    gpu->begin_frame();
+    struct EndFrame { gpu::Gpu* gpu; ~EndFrame() { gpu->end_frame(); } } end{gpu};
+    const Tier* tier = find_tier("full");
+    Image source,negative,rgb;
+    bool ok = tier_image(session,*tier,source,error);
+    if (ok) session->pipeline->set_source_shape(source.w,source.h,session->source.w,session->source.h);
+    if (ok) ok = negative_for(session,*tier,&session->progress,negative,error);
+    if (ok) {
+        const auto& state = session->tiers[tier->name];
+        ok = session->pipeline->set_overscan_frame(state.overscan_frame_w,state.overscan_frame_h,error);
+    }
+    if (ok) ok = run_print_for(session,negative,rgb,&session->progress,error);
+    if (!ok) return false;
+    const uint64_t count = uint64_t(rgb.w)*rgb.h;
+    if (!count || count > 400'000'000 || rgb.c != 3) { error = "Invalid float output dimensions"; return false; }
+    output.resize(size_t(count)*3);
+    if (!gpu->read(rgb.buf.get(),0,output.data(),output.size()*sizeof(float),error)) return false;
+    width = rgb.w; height = rgb.h;
+    session->progress.done = true;
+    return true;
+}

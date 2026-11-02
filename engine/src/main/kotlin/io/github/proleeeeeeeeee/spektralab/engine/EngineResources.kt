@@ -10,7 +10,7 @@ import java.io.File
  * photo filename or network response. The marker is written after the complete copy.
  */
 internal object EngineResources {
-    private const val REVISION = "a46627d250545a394ca21522f8a28b0fb89e4c42"
+    private const val REVISION = "a46627d250545a394ca21522f8a28b0fb89e4c42-android3"
     fun install(context: Context): File {
         val target = File(context.filesDir, "engine-" + REVISION)
         val marker = File(target, ".complete")
@@ -19,6 +19,7 @@ internal object EngineResources {
         copyAsset(context, "engine", target)
         check(File(target, "spektrafilm_constants.bin").isFile) { "Engine constants are missing" }
         check(File(target, "vulkan/spk_take_rgb.spv").isFile) { "Engine shaders are missing" }
+        check(File(target, "io/sRGB.icc").isFile) { "Output color profile is missing" }
         marker.writeText(REVISION, Charsets.UTF_8)
         return target
     }

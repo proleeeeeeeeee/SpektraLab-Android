@@ -14,7 +14,7 @@ android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
     defaultConfig {
-        minSdk = 29
+        minSdk = 30
         ndk { abiFilters += providers.gradleProperty("androidAbi").orElse("arm64-v8a").get().split(",") }
         externalNativeBuild {
             cmake {
@@ -45,6 +45,8 @@ val stageEngineAssets by tasks.registering(Sync::class) {
     from(upstream.resolve("engine/resources_product/neutral_print_filters.json")) { into("engine"); rename { "product-neutral-print-filters.json" } }
     from(rootProject.file("LICENSES")) { into("licenses") }
     from(rootProject.file("NOTICE.md")) { into("licenses"); rename { "Android-NOTICE.md" } }
+    from(rootProject.file("third_party/libraw/LICENSE.LGPL")) { into("licenses"); rename { "LibRaw-LGPL-2.1.txt" } }
+    from(rootProject.file("third_party/libraw/COPYRIGHT")) { into("licenses"); rename { "LibRaw-COPYRIGHT.txt" } }
 }
 val compileEngineShaders by tasks.registering {
     dependsOn(stageEngineAssets)

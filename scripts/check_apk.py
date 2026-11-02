@@ -30,6 +30,8 @@ def main() -> None:
                     assert alignment >= 16384, "Native load segment is not 16 KB compatible: " + name
         for name in ("assets/licenses/LICENSE", "assets/licenses/SPEKTRAFILM_LICENSE.txt",
                      "assets/licenses/Product-profiles-NOTICE.md", "assets/licenses/Android-NOTICE.md",
+                     "assets/licenses/LibRaw-LGPL-2.1.txt", "assets/licenses/LibRaw-COPYRIGHT.txt",
+                     "assets/engine/io/sRGB.icc",
                      "assets/engine/spektrafilm_constants.bin", "assets/engine/vulkan/spk_take_rgb.spv"):
             assert name in apk.namelist(), "Missing required asset: " + name
         print("ABIs: " + ", ".join(sorted({name.split("/")[1] for name in libraries})))

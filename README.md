@@ -6,11 +6,11 @@ Download the test APK and matching complete source from [Releases](https://githu
 
 Import a photograph, choose film and paper, add a physical film edge, and save a new photograph. Processing uses the actual upstream C++ spectral engine through Vulkan on the device. A running computer, account and network connection are not required.
 
-The first device-test build targets the Galaxy S25 Ultra (arm64, Android 10 or newer with a compatible Vulkan driver). This is an early port, not an official SpektraLab release. See [testing](docs/TESTING.md) for measured results and remaining device checks.
+The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer with a compatible Vulkan driver). Ultra HDR export requires Android 14 or newer. This is an early port, not an official SpektraLab release. See [testing](docs/TESTING.md) for measured results and remaining device checks.
 
 ## Current workflow
 
-- System photo picker; the app receives only the photograph you select.
+- System multi-photo picker and document picker for RAW files; access is limited to selected files.
 - Four films: Kodak Gold 200, Portra 400, CineStill 800T and Tri-X 400.
 - Compatible color papers and Ilford Multigrade IV RC for black and white.
 - No frame, 135 perforations, filed 135 edge, 120 6×6 and XPan.
@@ -19,10 +19,19 @@ The first device-test build targets the Galaxy S25 Ultra (arm64, Android 10 or n
 - Set physical grain and halation strength.
 - Free crop with draggable corners, aspect presets, 90° rotation, horizontal/vertical flips and ±15° straightening.
 - Drag to reframe, undo / redo, and hold to compare the original.
-- JPEG or PNG export into Pictures / SpektraLab.
-- Private last-edit recovery. Gallery originals are never overwritten.
+- Named projects with a persistent multi-photo grid, selection and private edit recovery.
+- Custom presets and copied settings; composition transfers only when requested.
+- Resumable serial batch export, per-photo error reporting and retry.
+- JPEG, PNG, true 16-bit RGB TIFF with an embedded sRGB profile, and calibrated Ultra HDR JPEG export.
+- 2560 px, 4096 px or Original resolution. Gallery originals are never overwritten.
 
-Preview inputs have a 1024 px long edge. Export inputs have a **2560 px long edge**, before cropping and the added film edge. This deliberate first-build memory budget also applies to large Samsung photographs. Export is opaque 8-bit sRGB; original EXIF and location are not copied. RAW, HDR output, batch work, full-resolution export and desktop editing controls are outside this first build.
+Preview inputs have a 1024 px long edge. Original export uses the complete decoded source before crop and film edge; smaller sizes explicitly downsample at import-to-engine time. A conservative memory check and the GPU driver may reject a large job. **Original never silently shrinks the source.** This is not a claim that a phone can process every 50 MP or 200 MP photograph at full size.
+
+RAW development uses bundled LibRaw 0.22.2, full sensor pixels and as-shot white balance, then feeds linear 16-bit ProPhoto RGB into the spectral engine. It does not use an embedded JPEG. Some compressed DNG/Expert RAW variants and proprietary encodings are unsupported; S25 Ultra camera files still need hardware testing. RAW is an input format: processed sensor RAW export is not offered.
+
+TIFF quantizes the float scan directly to unsigned RGB16, without passing through an 8-bit Bitmap. JPEG/PNG remain opaque 8-bit sRGB. Ultra HDR combines a new SDR base with a gain map calculated from the same edited print and the paper's calibrated EDR response; unsupported papers fail explicitly. The editor displays the SDR preview. The original camera gain map is not preserved as a separate scene-linear HDR input path. Export does not copy original EXIF or GPS.
+
+Batch work runs while the app is open. If Android stops it, completed outputs stay saved and unfinished jobs can be resumed. This build does not provide a background foreground-service worker, desktop color-space parity, layered masks or lossless RAW output.
 
 ## Build
 
@@ -38,10 +47,11 @@ Install the official Android SDK/NDK and a host glslangValidator before building
 
 | Module | Responsibility |
 | --- | --- |
-| core | Immutable recipes, compatibility, crop geometry, bounded history and native parameter schema |
-| engine | Serial engine ownership, trusted resource installation and checked JNI bitmap bridge |
-| app | Compose interface, system picker, bounded private import and atomic MediaStore export |
+| core | Immutable recipes, presets, export snapshots, compatibility and crop geometry |
+| engine | Serial Vulkan ownership, RAW/image decoding, float output, TIFF and HDR encoding |
+| app | Compose interface, atomic project storage, resumable queue and MediaStore publishing |
 | third_party/spektralab | Unmodified upstream source pinned as a Git submodule |
+| third_party/libraw | Unmodified LibRaw 0.22.2 source, using its LGPL-2.1 license option |
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [PRIVACY.md](docs/PRIVACY.md).
 

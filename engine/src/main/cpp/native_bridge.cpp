@@ -13,6 +13,11 @@
 #include <unordered_map>
 #include <vector>
 #include "scan_tone.hpp"
+#include "source_codec.hpp"
+#include "output_codec.hpp"
+#include "android_engine.hpp"
+#include "core/json.hpp"
+#include <algorithm>
 
 namespace {
 constexpr uint64_t kMaxInputPixels = 7'000'000;
@@ -23,6 +28,9 @@ struct EngineContext {
     spk_session* session = nullptr;
     std::string source_key;
     std::string rendered_parameters;
+    std::string resources;
+    std::vector<float> float_scan;
+    uint32_t float_width=0,float_height=0;
     spk_result cached_result{};
     std::atomic<bool> cancelled{false};
     std::mutex render_mutex;
@@ -94,6 +102,7 @@ jlong create(JNIEnv* env, jobject, jstring resources) {
     try {
         auto context = std::make_shared<EngineContext>();
         const auto directory = utf8(env, resources, 4096);
+        context->resources = directory;
         context->engine = spk_engine_create(directory.c_str(), nullptr);
         if (!context->engine) throw std::runtime_error(engine_error(nullptr, "Vulkan initialization failed"));
         const jlong handle = next_handle.fetch_add(1);
@@ -125,6 +134,7 @@ jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source
         if (source_key.empty()) throw std::invalid_argument("Missing source identity");
         if (context->source_key != source_key || !context->session) {
             spk_result_free(&context->cached_result);
+            std::vector<float>().swap(context->float_scan);
             context->rendered_parameters.clear();
             std::vector<float> rgb;
             AndroidBitmapInfo info{};
@@ -213,6 +223,132 @@ jobject render(JNIEnv* env, jobject, jlong handle, jobject input, jstring source
     }
 }
 
+// The app passes only its private imported files and generated export paths.
+// This boundary never receives gallery URIs or filenames from document providers.
+ScanTone read_tone(JNIEnv* env,jfloatArray values) {
+    if (!values || env->GetArrayLength(values)!=6) throw std::invalid_argument("Expected six scan adjustments");
+    std::array<float,6> tone{};env->GetFloatArrayRegion(values,0,6,tone.data());
+    if (env->ExceptionCheck()) throw std::runtime_error("Could not read scan adjustments");
+    return ScanTone(tone);
+}
+void release_source(EngineContext& c) {
+    std::lock_guard<std::mutex> lock(c.session_mutex);
+    if (c.session) { spk_session_release(c.session);c.session=nullptr; }
+    spk_result_free(&c.cached_result);c.source_key.clear();c.rendered_parameters.clear();
+    std::vector<float>().swap(c.float_scan);
+}
+std::string source_parameters(const std::string& params,bool raw,bool hdr) {
+    spk::Json json;std::string error;
+    if (!spk::Json::parse(params,json,error) || !json.is_object()) throw std::invalid_argument("Invalid render settings");
+    json.set("input_color_space",spk::Json(std::string(raw?"ProPhoto RGB":"sRGB")));
+    json.set("input_cctf_decoding",spk::Json(!raw));
+    json.set("extended_dynamic_range",spk::Json(hdr));
+    return json.dump();
+}
+void open_source(EngineContext& c,const std::string& path,const std::string& key,
+                 const std::string& params,int edge,uint64_t budget) {
+    if (c.session && c.source_key==key) return;
+    release_source(c);
+    const auto info=inspect_source(path);
+    const double scale=edge==0?1.0:std::min(1.0,double(edge)/std::max(info.width,info.height));
+    const uint64_t pixels=uint64_t(std::ceil(info.width*scale))*uint64_t(std::ceil(info.height*scale));
+    // Source, cached negative, pipeline arenas, staging and float readback all
+    // coexist. Admission rejects the requested job; it never reduces its size.
+    if (pixels*160+128*1024*1024>budget)
+        throw std::runtime_error("This resolution exceeds the available render memory. Choose 4096 or 2560 px; Original is never silently resized.");
+    auto decoded=decode_source(path,edge,budget,&c.cancelled);
+    const auto actual=source_parameters(params,decoded.linear_prophoto,false);
+    const spk_image image{decoded.rgb.data(),decoded.width,decoded.height,3};
+    std::lock_guard<std::mutex> lock(c.session_mutex);
+    c.session=spk_open(c.engine,&image,actual.c_str(),nullptr);
+    if (!c.session) throw std::runtime_error(engine_error(c.engine,"Opening source pixels failed"));
+    c.source_key=key;
+}
+void float_render(EngineContext& c,const std::string& params,std::vector<float>& pixels,uint32_t& w,uint32_t& h) {
+    if (spk_set_params(c.session,params.c_str(),nullptr)!=SPK_OK)
+        throw std::runtime_error(engine_error(c.engine,"Updating output settings failed"));
+    std::string error;
+    if (!android_float_render(c.session,pixels,w,h,error)) throw std::runtime_error("High-precision render failed: "+error);
+    if (c.cancelled.load()) throw std::runtime_error("Processing cancelled");
+}
+jobject bitmap_rgba(JNIEnv* env,uint32_t w,uint32_t h,const std::vector<uint8_t>& pixels) {
+    jclass bitmap=env->FindClass("android/graphics/Bitmap");
+    jclass config=env->FindClass("android/graphics/Bitmap$Config");
+    const auto field=env->GetStaticFieldID(config,"ARGB_8888","Landroid/graphics/Bitmap$Config;");
+    const auto method=env->GetStaticMethodID(bitmap,"createBitmap","(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
+    jobject output=env->CallStaticObjectMethod(bitmap,method,jint(w),jint(h),env->GetStaticObjectField(config,field));
+    if (!output || env->ExceptionCheck()) throw std::runtime_error("Could not allocate the photograph preview");
+    BitmapPixels target(env,output);
+    for (uint32_t y=0;y<h;++y) std::memcpy(static_cast<uint8_t*>(target.pixels)+size_t(y)*target.info.stride,
+                                         pixels.data()+size_t(y)*w*4,size_t(w)*4);
+    return output;
+}
+jintArray source_info(JNIEnv* env,jobject,jstring file) {
+    try {
+        const auto info=inspect_source(utf8(env,file,4096));
+        const jint values[]={jint(info.width),jint(info.height),info.raw?1:0};
+        auto result=env->NewIntArray(3);if (result) env->SetIntArrayRegion(result,0,3,values);return result;
+    } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
+}
+jobject source_preview(JNIEnv* env,jobject,jstring file,jint edge,jlong budget) {
+    try {
+        if (edge<64 || edge>2560 || budget<0) throw std::invalid_argument("Invalid preview budget");
+        auto source=decode_source(utf8(env,file,4096),edge,uint64_t(budget),nullptr,true);
+        std::atomic<bool> cancelled{false};const ScanTone tone({});
+        return bitmap_rgba(env,source.width,source.height,scan_rgba(source.rgb,tone,cancelled));
+    } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
+}
+jobject render_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring source,jstring parameters,
+                    jfloatArray scan_tone,jint edge,jlong budget,jboolean raw) {
+    try {
+        if (edge<64 || edge>2560 || budget<0) throw std::invalid_argument("Invalid preview size");
+        auto c=context_for(handle);std::lock_guard<std::mutex> lock(c->render_mutex);c->cancelled.store(false);
+        const auto path=utf8(env,file,4096),key="file:"+utf8(env,source,256)+":"+std::to_string(edge);
+        const auto params=source_parameters(utf8(env,parameters,65536),raw,false);
+        const auto tone=read_tone(env,scan_tone);
+        open_source(*c,path,key,params,edge,uint64_t(budget));
+        if (c->float_scan.empty() || c->rendered_parameters!=params) {
+            float_render(*c,params,c->float_scan,c->float_width,c->float_height);c->rendered_parameters=params;
+        }
+        return bitmap_rgba(env,c->float_width,c->float_height,scan_rgba(c->float_scan,tone,c->cancelled));
+    } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
+}
+jfloatArray export_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring parameters,jfloatArray scan_tone,
+                        jint edge,jlong budget,jboolean raw,jstring destination,jstring gain_path,jint format,jint quality) {
+    std::shared_ptr<EngineContext> c;
+    try {
+        if (edge<0 || edge>32768 || budget<0 || format<0 || format>3 || quality<60 || quality>100)
+            throw std::invalid_argument("Invalid export request");
+        c=context_for(handle);std::lock_guard<std::mutex> lock(c->render_mutex);c->cancelled.store(false);
+        const auto path=utf8(env,file,4096),output=utf8(env,destination,4096);
+        const auto params=source_parameters(utf8(env,parameters,65536),raw,false);
+        const auto tone=read_tone(env,scan_tone);
+        // Exports release the preview and full session on completion. Large
+        // batch jobs therefore do not retain the previous photograph's planes.
+        release_source(*c);
+        struct Cleanup { EngineContext& c;~Cleanup(){release_source(c);} } cleanup{*c};
+        open_source(*c,path,"export",params,edge,uint64_t(budget));
+        std::vector<float> sdr;uint32_t w=0,h=0;float_render(*c,params,sdr,w,h);
+        float low=1.f,high=1.f;
+        if (format==2) write_tiff16(output,c->resources+"/io/sRGB.icc",w,h,sdr,tone,c->cancelled);
+        else {
+            auto rgba=scan_rgba(sdr,tone,c->cancelled);
+            std::vector<float>().swap(sdr);
+            if (format==3) {
+                std::vector<float> hdr;uint32_t hw=0,hh=0;
+                const auto hdr_params=source_parameters(params,raw,true);
+                float_render(*c,hdr_params,hdr,hw,hh);
+                if (hw!=w || hh!=h) throw std::runtime_error("HDR and SDR render geometry differs");
+                auto gain=make_gain_map(w,h,rgba,hdr,tone,c->cancelled);low=gain.minimum;high=gain.maximum;
+                encode_image(utf8(env,gain_path,4096),gain.width,gain.height,gain.rgba,true,100,c->cancelled);
+            }
+            encode_image(output,w,h,rgba,format==1 || format==3,quality,c->cancelled);
+        }
+        const jfloat values[]={jfloat(w),jfloat(h),low,high};
+        auto result=env->NewFloatArray(4);if (result) env->SetFloatArrayRegion(result,0,4,values);return result;
+    } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
+}
+
 jstring capabilities(JNIEnv* env, jobject, jlong handle) {
     try {
         auto context = context_for(handle);
@@ -245,6 +381,10 @@ const JNINativeMethod methods[] = {
     {const_cast<char*>("create"), const_cast<char*>("(Ljava/lang/String;)J"), reinterpret_cast<void*>(create)},
     {const_cast<char*>("render"), const_cast<char*>("(JLandroid/graphics/Bitmap;Ljava/lang/String;Ljava/lang/String;[F)Landroid/graphics/Bitmap;"), reinterpret_cast<void*>(render)},
     {const_cast<char*>("capabilities"), const_cast<char*>("(J)Ljava/lang/String;"), reinterpret_cast<void*>(capabilities)},
+    {const_cast<char*>("sourceInfo"),const_cast<char*>("(Ljava/lang/String;)[I"),reinterpret_cast<void*>(source_info)},
+    {const_cast<char*>("sourcePreview"),const_cast<char*>("(Ljava/lang/String;IJ)Landroid/graphics/Bitmap;"),reinterpret_cast<void*>(source_preview)},
+    {const_cast<char*>("renderFile"),const_cast<char*>("(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[FIJZ)Landroid/graphics/Bitmap;"),reinterpret_cast<void*>(render_file)},
+    {const_cast<char*>("exportFile"),const_cast<char*>("(JLjava/lang/String;Ljava/lang/String;[FIJZLjava/lang/String;Ljava/lang/String;II)[F"),reinterpret_cast<void*>(export_file)},
     {const_cast<char*>("cancel"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(cancel)},
     {const_cast<char*>("destroy"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(destroy)},
 };

@@ -10,7 +10,7 @@
 | Kotlin / Compose plugin | 2.2.21 |
 | Compose BOM | 2025.10.01 |
 | Compile / target SDK | 36 |
-| Minimum Android | API 29 |
+| Minimum Android | API 30; Ultra HDR output API 34 |
 | Android NDK | 28.2.13676358 |
 | CMake | 3.22.1 |
 | glslangValidator | Host compiler supporting Vulkan 1.0 SPIR-V |
@@ -46,6 +46,6 @@ Distribute the exact matching source, build scripts, notices and pinned upstream
 
     python scripts/source_bundle.py --output /path/to/SpektraLab-Android-source.zip
 
-The script archives tracked files from both the root commit and the pinned submodule, excluding build caches and private keys. It must be run after committing changes. The APK and source bundle in a release must correspond to the same commit.
+The script archives tracked files from the root commit and every pinned submodule, including SpektraLab and LibRaw, excluding build caches and private keys. It must be run after committing changes. The APK and complete source bundle in a release must correspond to the same commit. LibRaw is compiled locally without optional proprietary SDKs or runtime downloads.
 
 Official references: [Android SDK terms](https://developer.android.com/studio/terms), [16 KB page support](https://developer.android.com/guide/practices/page-sizes), [emulator acceleration and Vulkan](https://developer.android.com/studio/run/emulator-acceleration).

@@ -11,9 +11,10 @@ import kotlinx.serialization.json.put
 
 object RenderPolicy {
     const val PREVIEW_LONG_EDGE = 1024
-    // Bound peak memory for the first device-test build, including 200 MP inputs.
+    // Bound UI/comparison decoding. File exports use ExportSize and native
+    // memory admission, including a distinct full-source Original mode.
     const val EXPORT_LONG_EDGE = 2560
-    const val MAX_IMPORT_BYTES = 128L * 1024 * 1024
+    const val MAX_IMPORT_BYTES = 512L * 1024 * 1024
     const val MAX_SOURCE_PIXELS = 240_000_000L
     const val MAX_SOURCE_SIDE = 32768
     const val MAX_DECODED_PIXELS = 7_000_000L
