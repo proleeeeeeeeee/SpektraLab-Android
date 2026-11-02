@@ -19,13 +19,18 @@ class MaterialArtworkResourceTest {
     @get:Rule val compose=createComposeRule()
     @Test fun stockResourcesDecodeWithTransparencyAndMissingCoverCannotSubstituteAnotherStock() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        val resources=Materials.films.map { requireNotNull(filmCoverResource(it.id)) }
-        assertEquals(4,resources.distinct().size)
-        Materials.films.zip(resources).forEach { (film,resource) -> assertEquals("cover_"+film.id,context.resources.getResourceEntryName(resource)) }
+        val photographed=Materials.films.filter { filmCoverResource(it.id)!=null }
+        val resources=photographed.map { requireNotNull(filmCoverResource(it.id)) }
+        assertEquals(6,resources.distinct().size)
+        photographed.zip(resources).forEach { (film,resource) -> assertEquals("cover_"+film.id,context.resources.getResourceEntryName(resource)) }
         for (resource in resources) {
             val image=requireNotNull(decodeFilmCover(context,resource))
-            assertTrue(image.hasAlpha());assertTrue(maxOf(image.width,image.height)<=512)
-            assertEquals(0,android.graphics.Color.alpha(image.getPixel(0,0)))
+            assertTrue(maxOf(image.width,image.height)<=512)
+            val source=android.util.TypedValue().also { context.resources.getValue(resource,it,true) }.string.toString()
+            assertTrue("Resource extension must match actual PNG payload",source.endsWith(".png"))
+            // Two uncut product photographs are opaque; the original four design cutouts are transparent.
+            val opaque=context.resources.getResourceEntryName(resource) in setOf("cover_kodak_portra_160","cover_kodak_portra_800")
+            assertEquals(if (opaque) 255 else 0,android.graphics.Color.alpha(image.getPixel(0,0)))
             image.recycle()
         }
         assertNull(filmCoverResource("missing-stock"));assertNull(decodeFilmCover(context,0))
@@ -39,5 +44,13 @@ class MaterialArtworkResourceTest {
         compose.runOnIdle { id="cinestill_800t";missing=false }
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("film-cover-$id").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("film-cover-kodak_gold_200").assertDoesNotExist()
+        val cards=Materials.films.filter { filmCoverResource(it.id)==null }
+        assertEquals(5,cards.size)
+        for (stock in cards) {
+            compose.runOnIdle { id=stock.id }
+            compose.onNodeWithTag("film-card-${stock.id}").assertIsDisplayed()
+            compose.onNodeWithText(stock.name).assertIsDisplayed()
+            compose.onNodeWithText("Cover unavailable").assertDoesNotExist()
+        }
     }
 }

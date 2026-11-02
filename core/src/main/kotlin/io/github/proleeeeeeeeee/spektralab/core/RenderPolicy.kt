@@ -54,12 +54,15 @@ fun engineParameters(recipe: EditRecipe, width: Int, height: Int): String {
         put("halation_amount", recipe.adjustments.halation)
         put("auto_exposure_method", "balanced")
         put("preview_long_edge", RenderPolicy.PREVIEW_LONG_EDGE)
-        if (Materials.film(recipe.filmId).monochrome) {
-            // Upstream's Multigrade IV RC grade-2 pack. The color database has
-            // no silver-paper row, so leaving this implicit retains a color pack.
+        if (PaperGrade.supports(recipe)) {
+            // Explicit fitted BW packs bypass the color neutral-filter database.
+            // All rendering surfaces share this physical-print boundary.
+            val grade = recipe.paperGrade
+            put("enlarger_illuminant", PaperGrade.ENLARGER_ILLUMINANT)
             put("c_filter_neutral", 0)
-            put("m_filter_neutral", 0)
-            put("y_filter_neutral", 68)
+            put("m_filter_neutral", grade.mFilterNeutral)
+            put("y_filter_neutral", grade.yFilterNeutral)
+            put("print_exposure", grade.printExposure)
         }
         put("geometry_crop_x", crop.x)
         put("geometry_crop_y", crop.y)
@@ -77,13 +80,8 @@ fun engineParameters(recipe: EditRecipe, width: Int, height: Int): String {
             FilmFrame.XPAN -> 65
             else -> 36
         })
-        put("overscan_edge_text", when (recipe.filmId) {
-            "kodak_gold_200" -> if (recipe.frame == FilmFrame.SQUARE_120) "KODAK 200" else "KODAK GB 200-7"
-            "kodak_portra_400" -> "KODAK PORTRA 400"
-            "cinestill_800t" -> "CINESTILL 800T"
-            "kodak_tri_x_400" -> "KODAK 400TX"
-            else -> ""
-        })
+        put("overscan_edge_text", if (recipe.filmId=="kodak_gold_200" && recipe.frame==FilmFrame.SQUARE_120)
+            "KODAK 200" else Materials.film(recipe.filmId).edgeText)
         put("overscan_camera_seed", 42)
         put("overscan_frame_seed", 36)
         put("overscan_leaks", 0)

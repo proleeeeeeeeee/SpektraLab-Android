@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0-alpha.1
+
+- Expand the catalog to 11 films and nine print materials using existing valid upstream profiles, with provenance, descriptions, comparison and verified artwork or explicit named cards.
+- Add persistent Light Table stars, keep/reject flags, color labels, picks, filters and exact-ID batch-export scopes.
+- Export paginated JPG/PDF contact sheets from frozen real-photo, recipe and review snapshots, with bounded rendering, publication rollback and retry.
+- Add fitted black-and-white paper grades 00–5, default-grade migration and preview/sample/export agreement, independently of scan contrast.
+- Add independent real-negative JPEG/PNG import, original-pixel film-base sampling, creative density inversion, exposure/white balance and immutable same-roll serial exports. Preserve original bytes and recover controlled orphan imports.
+- Retain the earlier Film/Paper option-art, stale-preview and Light Table fixes. Version code is 7 with the preceding signing identity.
+
+Negative conversion is limited to 8-bit sRGB, 1024 px previews and 2560 px exports. Validation uses known synthetic negatives, not real-film calibration. S25 Ultra hardware, full 64-capture stress and actual process-kill testing remain unverified. The MediaStore-insert-before-pending-URI-journal forced-kill window can still leave an untracked pending row.
+
 ## 0.4.1-alpha.1
 
 - Fix the lower Film option pictures by reusing the four existing transparent packaging cutouts, explicitly mapped to each film.

@@ -8,6 +8,8 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -39,19 +41,21 @@ import kotlin.math.*
 
 @Composable
 internal fun LightTableScreen(project: PhotoProject,model: LightTableViewModel,onBack: ()->Unit,
-                              onEdit: (String)->Unit,onImport: ()->Unit,importing: Boolean,canImport: Boolean) {
+                              onEdit: (String)->Unit,onImport: ()->Unit,importing: Boolean,canImport: Boolean,
+                              onExport: (Set<String>)->Unit={},suspended: Boolean=false,onContactSheet: (PhotoProject,LightTableLayout)->Unit={ _,_ -> }) {
     val state by model.state.collectAsStateWithLifecycle()
     val lifecycle=LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(project) { model.activate(project) }
+    val latestSuspended by rememberUpdatedState(suspended)
+    LaunchedEffect(project,suspended) { if (suspended) model.pause() else model.activate(project) }
     DisposableEffect(lifecycle,model) {
         val observer=LifecycleEventObserver { _,event ->
             if (event==Lifecycle.Event.ON_STOP) model.pause()
-            if (event==Lifecycle.Event.ON_START) model.resume()
+            if (event==Lifecycle.Event.ON_START && !latestSuspended) model.resume()
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer);model.pause() }
     }
-    Column(Modifier.fillMaxSize()) {
+    val header: @Composable ()->Unit = {
         Row(Modifier.fillMaxWidth().padding(end=12.dp).heightIn(min=56.dp),verticalAlignment=Alignment.CenterVertically) {
             TextButton(onClick=onBack,modifier=Modifier.width(48.dp).semantics { contentDescription="Back to photographs" },contentPadding=PaddingValues(0.dp)) { Text("‹",fontSize=30.sp) }
             Text("Light table",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
@@ -61,12 +65,14 @@ internal fun LightTableScreen(project: PhotoProject,model: LightTableViewModel,o
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(project.name,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp,color=MutedColor)
-                Text(if (project.photos.size>LIGHT_TABLE_PAGE_SIZE) "${project.photos.size} photographs, page ${state.layout.page+1} of ${(project.photos.size+LIGHT_TABLE_PAGE_SIZE-1)/LIGHT_TABLE_PAGE_SIZE}" else "${project.photos.size} photographs",fontSize=12.sp,color=MutedColor)
+                Text(if (state.filteredPhotos.size>LIGHT_TABLE_PAGE_SIZE) "${state.filteredPhotos.size} / ${project.photos.size} photographs, page ${state.layout.page+1} of ${(state.filteredPhotos.size+LIGHT_TABLE_PAGE_SIZE-1)/LIGHT_TABLE_PAGE_SIZE}" else "${state.filteredPhotos.size} / ${project.photos.size} photographs",fontSize=12.sp,color=MutedColor)
             }
             if (state.loading) CircularProgressIndicator(Modifier.size(14.dp),strokeWidth=2.dp)
             TextButton(onClick=model::arrange,enabled=project.photos.isNotEmpty() && state.layoutReady) { Text("Arrange") }
         }
-        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal=12.dp,vertical=4.dp)) {
+    }
+    val viewport: @Composable (Modifier)->Unit = { modifier ->
+        Box(modifier.padding(horizontal=12.dp,vertical=4.dp)) {
             LightTableBoard(state,onSelect=model::select,onMove=model::move,onMoveLoupe=model::moveLoupe,
                 onCommit=model::commit,onEdit={ model.commit();onEdit(it) },onDetail=model::loadDetail,
                 modifier=Modifier.fillMaxSize())
@@ -75,7 +81,13 @@ internal fun LightTableScreen(project: PhotoProject,model: LightTableViewModel,o
                 Text("Import photographs into this project.",fontSize=13.sp,color=if (state.layout.lightOn) PanelColor else MutedColor,modifier=Modifier.padding(vertical=10.dp))
                 Button(onClick=onImport,enabled=!importing && canImport) { Text(if (importing) "Importing…" else "Import photos") }
             }
+            if (project.photos.isNotEmpty() && state.layoutReady && state.filteredPhotos.isEmpty()) Column(Modifier.align(Alignment.Center).padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                Text("No photographs match",color=if (state.layout.lightOn) CanvasColor else PaperWhite)
+                Button(onClick={ model.filter(ReviewFilter()) },colors=ButtonDefaults.buttonColors(containerColor=PanelColor,contentColor=PaperWhite)) { Text("Clear filter") }
+            }
         }
+    }
+    val controls: @Composable ()->Unit = {
         if (state.failed.isNotEmpty() || state.error!=null) Row(Modifier.padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
             Text(state.error?.take(160) ?: "${state.failed.size} previews unavailable",fontSize=12.sp,color=MutedColor,modifier=Modifier.weight(1f))
             TextButton(onClick=model::retry) { Text("Retry previews") }
@@ -92,13 +104,27 @@ internal fun LightTableScreen(project: PhotoProject,model: LightTableViewModel,o
             FilterChip(state.layout.loupeEnabled,model::toggleLoupe,label={ Text("Loupe") },enabled=state.layoutReady)
             TextButton(onClick=model::zoom,enabled=state.layout.loupeEnabled && state.layoutReady) { Text("${state.layout.zoom.roundToInt()}×") }
             TextButton(onClick=model::rotate,enabled=state.layout.selectedId!=null && state.layoutReady,modifier=Modifier.semantics { contentDescription="Rotate selected film" }) { Text("Rotate ↻") }
-            TextButton(onClick={ model.page(1) },enabled=state.layoutReady && (state.layout.page+1)*LIGHT_TABLE_PAGE_SIZE<project.photos.size,
+            TextButton(onClick={ model.page(1) },enabled=state.layoutReady && (state.layout.page+1)*LIGHT_TABLE_PAGE_SIZE<state.filteredPhotos.size,
                 modifier=Modifier.semantics { contentDescription="Next light table page" }) { Text("›") }
         }
         Text("Drag film or lens. Double-tap a photograph to edit.",fontSize=11.sp,color=MutedColor,
             modifier=Modifier.fillMaxWidth().padding(start=16.dp,end=16.dp,bottom=8.dp))
     }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        if (maxWidth>=540.dp && maxWidth>maxHeight) {
+            Row(Modifier.fillMaxSize()) {
+                viewport(Modifier.weight(1f).fillMaxHeight())
+                Column(Modifier.width(280.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    header();ReviewToolbar(state,model,onExport,onContactSheet);controls()
+                }
+            }
+        } else Column(Modifier.fillMaxSize()) {
+            header();ReviewToolbar(state,model,onExport,onContactSheet)
+            viewport(Modifier.weight(1f).fillMaxWidth());controls()
+        }
+    }
 }
+
 
 private fun frameFor(state: LightTableState,photo: StoredPhoto,w: Double,h: Double): TableFrame {
     val image=state.images[photo.id]
@@ -107,7 +133,7 @@ private fun frameFor(state: LightTableState,photo: StoredPhoto,w: Double,h: Doub
 private fun hitFilm(state: LightTableState,point: Offset,w: Double,h: Double): FilmPlacement? {
     if (w<=0 || h<=0) return null
     val visible=state.pagePhotos.associateBy { it.id }
-    return state.layout.placements.asReversed().firstOrNull { pose ->
+    return state.layout.displayPlacements.asReversed().firstOrNull { pose ->
         visible[pose.photoId]?.let { LightTableGeometry.contains(TablePoint(point.x.toDouble(),point.y.toDouble()),pose,frameFor(state,it,w,h),w,h) } ?: false
     }
 }
@@ -196,7 +222,7 @@ private fun DrawScope.drawLightTableScene(state: LightTableState,bitmapPaint: Pa
     var y=step
     while (y<size.height) { drawLine(grid,Offset(0f,y),Offset(size.width,y),.5.dp.toPx());y+=step }
     val visible=state.pagePhotos.associateBy { it.id }
-    for (pose in state.layout.placements) {
+    for (pose in state.layout.displayPlacements) {
         val photo=visible[pose.photoId] ?: continue
         val frame=frameFor(state,photo,size.width.toDouble(),size.height.toDouble())
         val image=if (lens && pose.photoId==state.detailId) state.detail ?: state.images[photo.id] else state.images[photo.id]
@@ -220,7 +246,12 @@ private fun DrawScope.drawLightTableScene(state: LightTableState,bitmapPaint: Pa
             textPaint.color=if (lamp) android.graphics.Color.rgb(194,155,82) else android.graphics.Color.rgb(80,71,53)
             textPaint.textSize=w*.055f
             val number=(state.project?.photos?.indexOfFirst { it.id==photo.id } ?: 0)+1
-            drawIntoCanvas { it.nativeCanvas.drawText("${number.toString().padStart(2,'0')}  SPEKTRALAB",-w*.4f,h/2-w*.105f,textPaint) }
+            val review=state.layout.reviews[photo.id] ?: PhotoReview()
+            val marks=(if (review.rating>0) " ${review.rating}*" else "")+
+                (when (review.flag) { ReviewFlag.KEEP -> " K";ReviewFlag.REJECT -> " R";else -> "" })+
+                (if (photo.id in state.layout.pickedIds) " +" else "")
+            drawIntoCanvas { it.nativeCanvas.drawText("${number.toString().padStart(2,'0')}  SPEKTRALAB$marks",-w*.4f,h/2-w*.105f,textPaint) }
+            if (review.color!=ReviewColor.NONE) drawCircle(review.color.swatch(),w*.025f,Offset(w*.42f,-h/2+w*.055f))
             if (pose.photoId==state.layout.selectedId && !lens) drawRoundRect(AccentColor,Offset(-w/2,-h/2),androidx.compose.ui.geometry.Size(w,h),CornerRadius(1.dp.toPx()),style=Stroke(1.dp.toPx()))
         }
     }

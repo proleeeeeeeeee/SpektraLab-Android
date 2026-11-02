@@ -7,6 +7,7 @@ import org.junit.Test
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.double
 
 class RecipeTest {
     @Test fun monochromeSelectionRepairsThePaperAndCanBeUndone() {
@@ -79,7 +80,7 @@ class RecipeTest {
         val parameters = Json.parseToJsonElement(
             engineParameters(EditRecipe().withFilm("kodak_tri_x_400"), 640, 480)
         ).jsonObject
-        assertEquals("68", parameters.getValue("y_filter_neutral").jsonPrimitive.content)
-        assertEquals("0", parameters.getValue("m_filter_neutral").jsonPrimitive.content)
+        assertEquals(68.0, parameters.getValue("y_filter_neutral").jsonPrimitive.double)
+        assertEquals(0.0, parameters.getValue("m_filter_neutral").jsonPrimitive.double)
     }
 }

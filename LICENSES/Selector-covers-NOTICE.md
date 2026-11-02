@@ -1,6 +1,6 @@
 # Film selector cover provenance
 
-The four `app/src/main/res/drawable-nodpi/cover_*.png` images are byte-for-byte copies of the transparent cutouts in the existing SpektraLab Android design prototype (`assets/covers/*-cutout.png`). No new images were generated for this fix.
+The original four selector cutouts in `app/src/main/res/drawable-nodpi/` are byte-for-byte copies of the transparent cutouts in the existing SpektraLab Android design prototype (`assets/covers/*-cutout.png`). No new images were generated for this fix.
 
 Original product photographs recorded by that design:
 
@@ -12,3 +12,5 @@ Original product photographs recorded by that design:
 The prototype used imagegen to extract transparent backgrounds while retaining packaging. Those packaging photographs and trademarks retain their owners' rights; this notice does not relicense them as GPL artwork or establish public redistribution rights. They are reused from that existing design to identify the simulated film choices. The previous prototype README and image-edit-notes.md retain the source/edit history.
 
 Paper choices use bounded live samples of the user's current photograph rendered with each compatible paper. No private sample photograph is bundled. Frame choice illustrations remain original vector drawings.
+
+The Portra 160 and Portra 800 product photographs are copied from the pinned upstream FilmCovers resource directory without pixel changes. Their upstream `.jpg` filenames contain PNG bytes; the Android copies use the correct `.png` extension. The other newly exposed films use correctly named text profile cards because no verified packaging photograph is bundled. A profile card does not claim to reproduce manufacturer packaging.

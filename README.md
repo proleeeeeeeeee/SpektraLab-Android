@@ -11,8 +11,8 @@ The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer w
 ## Current workflow
 
 - System multi-photo picker and document picker for RAW files; access is limited to selected files.
-- Four films: Kodak Gold 200, Portra 400, CineStill 800T and Tri-X 400.
-- Compatible color papers and Ilford Multigrade IV RC for black and white.
+- Eleven films: Gold 200, Portra 160/400/800, Ektar 100, CineStill 800T, C200, Tri-X 400, HP5 Plus 400, T-Max 100 and Acros 100 II. The CineStill profile retains its documented derived identity.
+- Nine compatible print materials, including color papers, motion-picture print films and Ilford Multigrade IV RC for black and white. Materials show their source, characteristics and comparisons.
 - No frame, 135 perforations, filed 135 edge, 120 6×6 and XPan.
 - Direct selection in a horizontal Film / Paper / Frame strip.
 - Adjust exposure, automatic metering, temperature, tint, contrast, saturation, highlights and shadows.
@@ -22,6 +22,10 @@ The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer w
 - Named projects with a persistent multi-photo grid, selection and private edit recovery.
 - A project Light Table with backlight/brightness, draggable and rotatable film, a movable real-image loupe, eight-photo pages and saved arrangements.
 - Double-tap a photograph on the table to edit; Back restores the table and its layout.
+- Light Table stars, keep/reject flags, colors, picks and persistent filters, with explicit selection/filter batch-export scopes.
+- Paginated JPG/PDF contact sheets with original photograph numbers, recipe snapshots and optional ratings.
+- Seven fitted black-and-white paper grades, 00 through 5, independent of scan contrast.
+- A separate Negative scans entry for preserved JPEG/PNG negative captures, original-pixel film-base sampling, creative inversion, exposure/white balance and resumable same-roll export.
 - Custom presets and copied settings; composition transfers only when requested.
 - Resumable serial batch export, per-photo error reporting and retry.
 - JPEG, PNG, true 16-bit RGB TIFF with an embedded sRGB profile, and calibrated Ultra HDR JPEG export.
@@ -36,6 +40,14 @@ RAW development uses bundled LibRaw 0.22.2, full sensor pixels and as-shot white
 TIFF quantizes the float scan directly to unsigned RGB16, without passing through an 8-bit Bitmap. JPEG/PNG remain opaque 8-bit sRGB. Ultra HDR combines a new SDR base with a gain map calculated from the same edited print and the paper's calibrated EDR response; unsupported papers fail explicitly. The editor displays the SDR preview. The original camera gain map is not preserved as a separate scene-linear HDR input path. Export does not copy original EXIF or GPS.
 
 Batch work runs while the app is open. If Android stops it, completed outputs stay saved and unfinished jobs can be resumed. This build does not provide a background foreground-service worker, desktop color-space parity, layered masks or lossless RAW output.
+
+## Contact sheets and negative scans
+
+On the Light Table, choose **Export… → Contact sheet…** to save a frozen photo/recipe/review selection to Downloads / SpektraLab. Contact sheets render one bounded cell at a time and split large PDF jobs into bounded parts. Keep the app open; handled cancellation/failure removes partial group outputs and allows retry.
+
+Choose **Negative scans** below the photograph grid for captures of real negatives. Use even backlighting and retain a clear unexposed border for film-base sampling. Settings apply to the current roll; each export job keeps its own source, rotation and settings snapshot. This is an **8-bit sRGB JPEG/PNG creative workflow**, with 1024 px previews and exports up to 2560 px. RAW, 16-bit, HDR and calibrated reconstruction are not supported in this module. Sampling the base removes its cast but does not establish accurate scene color.
+
+Negative processing was verified with known synthetic inputs, not measured real-film/camera/backlight references. S25 Ultra hardware and full 64-capture stress testing remain unverified. A forced process death between MediaStore insertion and persistence of its pending URI can still leave an untracked pending row; normal handled failure/cancellation and persisted-URI recovery are tested. See [five-feature acceptance and limits](docs/FEATURES-v05.md).
 
 ## Build
 

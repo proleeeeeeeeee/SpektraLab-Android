@@ -28,7 +28,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ProjectLibrary(
     state: EditorState, model: EditorViewModel, onImport: () -> Unit, onFiles: () -> Unit,
-    onAbout: () -> Unit, onPresets: () -> Unit, onBatch: () -> Unit, onLightTable: () -> Unit,
+    onAbout: () -> Unit, onPresets: () -> Unit, onBatch: () -> Unit, onLightTable: () -> Unit,onNegative: () -> Unit={},
 ) {
     var menu by remember { mutableStateOf(false) }
     var nameAction by remember { mutableStateOf<String?>(null) }
@@ -93,10 +93,11 @@ internal fun ProjectLibrary(
             Button(onClick = onImport,enabled = state.ready && !state.importing,modifier = Modifier.weight(1f)) { Text("Import photos") }
             OutlinedButton(onClick = onFiles,enabled = state.ready && !state.importing) { Text("RAW / files") }
         }
-        Row(Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.SpaceBetween) {
+        FlowRow(Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = onPresets) { Text("Presets") }
             TextButton(onClick = onLightTable,enabled = !state.importing && !state.exporting) { Text("Light table") }
             TextButton(onClick = onBatch,enabled = state.library.active.photos.isNotEmpty()) { Text("Batch export") }
+            TextButton(onClick=onNegative,enabled=!state.importing && !state.exporting) { Text("Negative scans") }
         }
     }
     if (nameAction == "New project" || nameAction == "Rename project") NameDialog(nameAction!!,

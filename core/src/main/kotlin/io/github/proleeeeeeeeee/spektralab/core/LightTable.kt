@@ -26,25 +26,55 @@ data class LightTableLayout(
     val loupeEnabled: Boolean = true,val loupeX: Double = .7,val loupeY: Double = .65,
     val zoom: Double = 3.0,val page: Int = 0,val selectedId: String? = null,
     val placements: List<FilmPlacement> = emptyList(),
+    val reviews: Map<String,PhotoReview> = emptyMap(),val pickedIds: Set<String> = emptySet(),
+    val filter: ReviewFilter = ReviewFilter(),val filteredPlacements: List<FilmPlacement> = emptyList(),
+    val unfilteredPage: Int = 0,
 ) {
     init {
         require(brightness.isFinite() && brightness in .05..1.0)
         require(loupeX.isFinite() && loupeY.isFinite() && loupeX in 0.0..1.0 && loupeY in 0.0..1.0)
         require(zoom.isFinite() && zoom in 2.0..5.0 && page in 0..249)
         require(placements.size <= 2000 && placements.map { it.photoId }.distinct().size == placements.size)
+        require(filteredPlacements.size<=2000 && filteredPlacements.map { it.photoId }.distinct().size==filteredPlacements.size)
+        require(reviews.size<=2000 && pickedIds.size<=2000 && unfilteredPage in 0..249)
+        require((reviews.keys+pickedIds).all { it.isNotBlank() && it.length<=80 })
     }
+    val displayPlacements get()=if (filter.active) filteredPlacements else placements
+    fun matchingIds(ids: List<String>): List<String> = ids.filter { filter.accepts(it,reviews[it] ?: PhotoReview(),pickedIds) }
     fun reconcile(ids: List<String>): LightTableLayout {
         require(ids.size <= 2000 && ids.distinct().size == ids.size)
-        val kept = placements.filter { it.photoId in ids }
-        val known = kept.map { it.photoId }.toSet()
-        val added = ids.mapIndexedNotNull { index,id -> if (id in known) null else initialPlacement(id,index) }
-        val nextPage = page.coerceAtMost(maxOf(0,(ids.size-1)/LIGHT_TABLE_PAGE_SIZE))
-        val visible = ids.drop(nextPage*LIGHT_TABLE_PAGE_SIZE).take(LIGHT_TABLE_PAGE_SIZE)
-        return copy(page = nextPage,selectedId = selectedId?.takeIf { it in visible } ?: visible.firstOrNull(),placements = kept+added)
+        val valid=ids.toSet()
+        val clean=copy(reviews=reviews.filterKeys { it in valid },pickedIds=pickedIds.intersect(valid))
+        val kept=placements.filter { it.photoId in valid };val known=kept.map { it.photoId }.toSet()
+        val added=ids.mapIndexedNotNull { index,id -> if (id in known) null else initialPlacement(id,index) }
+        val matches=clean.matchingIds(ids);val matchSet=matches.toSet()
+        val filtered=if (filter.active) {
+            val old=if (filteredPlacements.map { it.photoId }.toSet()==matchSet) filteredPlacements else emptyList();val oldIds=old.map { it.photoId }.toSet()
+            old+matches.mapIndexedNotNull { index,id -> if (id in oldIds) null else initialPlacement(id,index) }
+        } else emptyList()
+        val nextPage=page.coerceAtMost(maxOf(0,(matches.size-1)/LIGHT_TABLE_PAGE_SIZE))
+        val visible=matches.drop(nextPage*LIGHT_TABLE_PAGE_SIZE).take(LIGHT_TABLE_PAGE_SIZE)
+        return clean.copy(page=nextPage,unfilteredPage=if (filter.active) unfilteredPage.coerceAtMost(maxOf(0,(ids.size-1)/LIGHT_TABLE_PAGE_SIZE)) else nextPage,
+            selectedId=selectedId?.takeIf { it in visible } ?: visible.firstOrNull(),placements=kept+added,filteredPlacements=filtered)
     }
+    fun positions(block: (List<FilmPlacement>)->List<FilmPlacement>): LightTableLayout =
+        if (filter.active) copy(filteredPlacements=block(filteredPlacements)) else copy(placements=block(placements))
     fun front(id: String): LightTableLayout {
-        val pose = placements.firstOrNull { it.photoId == id } ?: return this
-        return copy(selectedId = id,placements = placements.filterNot { it.photoId == id }+pose)
+        val pose=displayPlacements.firstOrNull { it.photoId==id } ?: return this
+        return positions { it.filterNot { p -> p.photoId==id }+pose }.copy(selectedId=id)
+    }
+    fun withFilter(value: ReviewFilter,ids: List<String>): LightTableLayout = copy(filter=value,
+        unfilteredPage=if (filter.active) unfilteredPage else page,page=if (value.active) 0 else unfilteredPage,
+        filteredPlacements=emptyList(),selectedId=null).reconcile(ids)
+    fun withReview(id: String,value: PhotoReview,ids: List<String>): LightTableLayout {
+        require(id in ids)
+        val next=copy(reviews=if (value==PhotoReview()) reviews-id else reviews+(id to value))
+        return (if (filter.active && matchingIds(ids)!=next.matchingIds(ids)) next.copy(filteredPlacements=emptyList()) else next).reconcile(ids)
+    }
+    fun withPicked(id: String,ids: List<String>): LightTableLayout {
+        require(id in ids)
+        val next=copy(pickedIds=if (id in pickedIds) pickedIds-id else pickedIds+id)
+        return (if (filter.active && matchingIds(ids)!=next.matchingIds(ids)) next.copy(filteredPlacements=emptyList()) else next).reconcile(ids)
     }
     companion object {
         fun initialPlacement(id: String,index: Int): FilmPlacement {

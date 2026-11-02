@@ -50,7 +50,17 @@ fun SpektraApp(viewModel: EditorViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lightModel: LightTableViewModel = viewModel()
+    val sheetModel: ContactSheetViewModel = viewModel()
+    val sheetState by sheetModel.state.collectAsStateWithLifecycle()
+    var sheetDraft by remember { mutableStateOf<ContactSheetDraft?>(null) }
+    val sheetLifecycle=androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(sheetLifecycle,sheetModel) {
+        val observer=androidx.lifecycle.LifecycleEventObserver { _,event -> if (event==androidx.lifecycle.Lifecycle.Event.ON_STOP) sheetModel.cancel() }
+        sheetLifecycle.addObserver(observer)
+        onDispose { sheetLifecycle.removeObserver(observer) }
+    }
     var lightTable by rememberSaveable { mutableStateOf(false) }
+    var negativeScan by rememberSaveable { mutableStateOf(false) }
     var returnToTable by rememberSaveable { mutableStateOf(false) }
     fun backFromEditor() {
         viewModel.showLibrary()
@@ -72,11 +82,15 @@ fun SpektraApp(viewModel: EditorViewModel) {
     SpektraTheme {
         Surface(Modifier.fillMaxSize(), color = CanvasColor) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                if (lightTable) {
+                if (negativeScan) {
+                    io.github.proleeeeeeeeee.spektralab.negative.NegativeScanScreen(onBack={ negativeScan=false;viewModel.showLibrary() })
+                } else if (lightTable) {
                     LightTableScreen(state.library.active,lightModel,
                         onBack={ lightTable=false;returnToTable=false;viewModel.showLibrary() },
                         onEdit={ id -> lightTable=false;returnToTable=true;viewModel.openPhoto(id) },
-                        onImport={ multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },importing=state.importing,canImport=state.ready)
+                        onImport={ multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },importing=state.importing,canImport=state.ready,
+                        onExport={ ids -> if (viewModel.prepareBatchSelection(ids)) { useCurrentLook=false;batch=true } },suspended=batch || state.batchRunning || sheetDraft!=null || sheetState.busy || sheetState.outputs.isNotEmpty() || sheetState.error!=null,
+                        onContactSheet={ project,layout -> sheetDraft=ContactSheetDraft(project,layout) })
                 } else if (state.showEditor && state.original != null) {
                     Editor(state, viewModel, onExport = { exportOptions = true },onPresets = { presets = true },
                         onBack={ backFromEditor() },backLabel=if (returnToTable) "Back to light table" else "Back to photographs")
@@ -85,9 +99,26 @@ fun SpektraApp(viewModel: EditorViewModel) {
                         onImport = { multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onFiles = { files.launch(arrayOf("image/*","application/octet-stream")) },
                         onAbout = { about = true },onPresets = { presets = true },onBatch = { batch = true },
-                        onLightTable={ viewModel.prepareLightTable();lightTable=true;returnToTable=false })
+                        onLightTable={ viewModel.prepareLightTable();lightTable=true;returnToTable=false },
+                        onNegative={ viewModel.prepareLightTable();negativeScan=true;lightTable=false;returnToTable=false })
                 }
             }
+            sheetDraft?.let { draft -> ContactSheetOptions(draft,sheetState.ready,sheetModel::start) { sheetDraft=null } }
+            if (sheetState.busy) AlertDialog(onDismissRequest={},title={ Text("Saving contact sheet") },
+                text={ Text("${sheetState.completed} / ${sheetState.total} photographs. Keep the app open.") },
+                confirmButton={ TextButton(onClick=sheetModel::cancel) { Text("Cancel contact sheet") } })
+            if (sheetState.error!=null && !sheetState.busy) AlertDialog(onDismissRequest=sheetModel::discard,
+                title={ Text("Contact sheet not saved") },text={ Text(sheetState.error.orEmpty()) },
+                confirmButton={ TextButton(onClick=sheetModel::retry,enabled=sheetState.canRetry) { Text("Retry contact sheet") } },
+                dismissButton={ TextButton(onClick=sheetModel::discard) { Text("Discard sheet request") } })
+            if (sheetState.outputs.isNotEmpty() && !sheetState.busy) AlertDialog(onDismissRequest=sheetModel::dismissOutputs,
+                title={ Text("Contact sheet saved") },text={ Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("${sheetState.outputs.size} ${if (sheetState.outputs.size==1) "file" else "files"} in Downloads / SpektraLab")
+                    sheetState.outputs.forEachIndexed { index,uri -> TextButton(onClick={
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,context.contentResolver.getType(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                            .onFailure { android.widget.Toast.makeText(context,"Saved in Downloads / SpektraLab",android.widget.Toast.LENGTH_LONG).show() }
+                    }) { Text("Open file ${index+1}") } }
+                } },confirmButton={ TextButton(onClick=sheetModel::dismissOutputs) { Text("Continue selecting") } })
             if (state.error != null) AlertDialog(
                 onDismissRequest = viewModel::dismissError,
                 title = { Text(if (state.ready) "Processing paused" else "Engine unavailable") },
@@ -119,6 +150,10 @@ fun SpektraApp(viewModel: EditorViewModel) {
             }
             if (batch) ModalBottomSheet(onDismissRequest = { batch = false }) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Text((if (state.selection.isEmpty()) state.library.active.photos.size else state.selection.size).toString()+" photographs in this export",Modifier.weight(1f).padding(horizontal=8.dp,vertical=8.dp),fontSize=13.sp)
+                        TextButton(onClick={ batch=false },modifier=Modifier.semantics { contentDescription="Close batch export" }) { Text("Close") }
+                    }
                     Row(Modifier.padding(horizontal = 24.dp),verticalAlignment = Alignment.CenterVertically) {
                         Text("Use current look for every photograph",Modifier.weight(1f),fontSize = 13.sp)
                         Checkbox(useCurrentLook,{ useCurrentLook = it })
@@ -178,7 +213,9 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
             }
             TextButton(onClick = onExport, enabled = state.ready && !state.importing) { Text("Export") }
         }
-        PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth(), showGrid = tool == EditorTool.COMPOSE)
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val portraitControlsMaxHeight = maxHeight * .55f
+            val controls: @Composable ()->Unit = {
         when (tool) {
             EditorTool.LOOKS -> MaterialControls(state, model)
             EditorTool.ADJUST -> AdjustmentControls(state, model)
@@ -191,6 +228,15 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
                 }
             }
             TextButton(onClick = { model.finishInteraction(); more = true }) { Text("More",color = MutedColor) }
+        }
+            }
+            if (maxWidth>=540.dp && maxWidth>maxHeight) Row(Modifier.fillMaxSize()) {
+                PhotoPreview(state,model::moveFraming,Modifier.weight(1f).fillMaxHeight(),showGrid=tool==EditorTool.COMPOSE)
+                Column(Modifier.width(280.dp).fillMaxHeight().verticalScroll(rememberScrollState())) { controls() }
+            } else Column(Modifier.fillMaxSize()) {
+                PhotoPreview(state,model::moveFraming,Modifier.weight(1f).fillMaxWidth(),showGrid=tool==EditorTool.COMPOSE)
+                Column(Modifier.fillMaxWidth().heightIn(max=portraitControlsMaxHeight).verticalScroll(rememberScrollState())) { controls() }
+            }
         }
     }
     if (cropping && state.original != null) CropSheet(state.original, state.recipe.composition.crop,
@@ -263,6 +309,7 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
 private fun MaterialControls(state: EditorState, model: EditorViewModel) {
     val artwork=if (state.material==MaterialTab.PAPER) rememberPaperSamples(state) else PaperSamplePresentation(PaperSampleState(),{})
     val samples=artwork.state
+    var details by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(PanelColor).padding(bottom = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             MaterialTab.entries.forEach { tab ->
@@ -294,14 +341,19 @@ private fun MaterialControls(state: EditorState, model: EditorViewModel) {
                 }
             }
         }
+        if (state.material==MaterialTab.PAPER) PaperGradeControls(state.recipe,model::selectPaperGrade)
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
+            TextButton(onClick={ details=true },enabled=state.material!=MaterialTab.FRAME) { Text("Material details / compare") }
+        }
         if (samples.failed.isNotEmpty()) TextButton(onClick=artwork.retry,modifier=Modifier.align(Alignment.End)) { Text("Retry samples") }
     }
+    if (details) MaterialDetailsSheet(state,onApply={ id -> if (state.material==MaterialTab.PAPER) model.selectPaper(id) else model.selectFilm(id) }) { details=false }
 }
 
 @Composable
 private fun Choice(id: String, brand: String, name: String, selected: Boolean,
                    paper: Boolean = false, frame: FilmFrame? = null, sample: Bitmap? = null, sampleLoading: Boolean = false, onClick: () -> Unit) {
-    Column(Modifier.width(116.dp).selectable(selected, role = Role.RadioButton, onClick = onClick)
+    Column(Modifier.width(116.dp).testTag("material-choice-$id").selectable(selected, role = Role.RadioButton, onClick = onClick)
         .padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.fillMaxWidth().height(64.dp)) {
             when {

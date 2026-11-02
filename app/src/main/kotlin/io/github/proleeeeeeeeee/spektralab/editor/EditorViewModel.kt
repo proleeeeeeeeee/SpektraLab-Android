@@ -241,6 +241,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleSelected(id: String) { mutableState.update { it.copy(selection = if (id in it.selection) it.selection-id else it.selection+id) } }
     fun selectAll() { mutableState.update { it.copy(selection = it.library.active.photos.map { p -> p.id }.toSet()) } }
     fun clearSelection() { mutableState.update { it.copy(selection = emptySet()) } }
+    fun prepareBatchSelection(ids: Set<String>): Boolean {
+        if (state.value.exporting || state.value.importing) return false
+        val valid=state.value.library.active.photos.filter { it.id in ids }.map { it.id }.toSet()
+        if (valid.isEmpty()) { mutableState.update { it.copy(notice="Choose at least one photograph") };return false }
+        finishInteraction();stopPreview()
+        mutableState.update { it.copy(selection=valid) }
+        return true
+    }
+
     fun deleteSelected() = libraryAction {
         stopPreview()
         store.deletePhotos(state.value.selection)
@@ -289,6 +298,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun selectPaper(id: String) = apply(state.value.recipe.copy(paperId = id))
+    fun selectPaperGrade(grade: PaperGrade) {
+        if (PaperGrade.supports(state.value.recipe)) apply(state.value.recipe.copy(paperGrade = grade))
+    }
     fun selectFrame(frame: FilmFrame) = apply(state.value.recipe.withFrame(frame))
     fun selectTab(tab: MaterialTab) { mutableState.update { it.copy(material = tab) } }
     fun adjust(control: Adjustment, value: Float) {

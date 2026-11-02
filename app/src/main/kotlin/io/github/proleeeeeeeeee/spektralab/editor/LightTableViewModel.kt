@@ -21,7 +21,8 @@ data class LightTableState(
     val failed: Set<String> = emptySet(),val error: String? = null,
     val revision: Long = 0,val savedRevision: Long = 0,
 ) {
-    val pagePhotos get() = project?.photos.orEmpty().drop(layout.page*LIGHT_TABLE_PAGE_SIZE).take(LIGHT_TABLE_PAGE_SIZE)
+    val filteredPhotos get() = project?.photos.orEmpty().let { all -> val ids=layout.matchingIds(all.map { it.id }).toSet();all.filter { it.id in ids } }
+    val pagePhotos get() = filteredPhotos.drop(layout.page*LIGHT_TABLE_PAGE_SIZE).take(LIGHT_TABLE_PAGE_SIZE)
 }
 
 class LightTableViewModel(application: Application): AndroidViewModel(application) {
@@ -76,7 +77,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
         loadJob?.cancel();detailJob?.cancel();engine?.cancel()
         val snapshot=state.value;val token=++generation
         mutableState.update { it.copy(images=emptyMap(),detail=null,detailId=null,loading=snapshot.pagePhotos.isNotEmpty(),failed=emptySet(),error=null) }
-        if (snapshot.pagePhotos.isEmpty()) return
+        if (snapshot.pagePhotos.isEmpty()) { engine?.close();engine=null;return }
         val worker=renderer()
         loadJob=viewModelScope.launch {
             try {
@@ -122,22 +123,35 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
     fun zoom() { change { it.copy(zoom=if (it.zoom<4) 4.0 else 2.0) };commit() }
     fun select(id: String) { change { it.front(id) } }
     fun move(id: String,dx: Double,dy: Double,frame: TableFrame,w: Double,h: Double) {
-        change { layout -> layout.copy(placements=layout.placements.map {
+        change { layout -> layout.positions { poses -> poses.map {
             if (it.photoId==id) LightTableGeometry.clamp(it.copy(x=(it.x+dx).coerceIn(0.0,1.0),y=(it.y+dy).coerceIn(0.0,1.0)),frame,w,h) else it
-        }) }
+        } } }
     }
     fun moveLoupe(x: Double,y: Double) { change { it.copy(loupeX=x.coerceIn(.05,.95),loupeY=y.coerceIn(.05,.95)) } }
     fun rotate() {
         val id=state.value.layout.selectedId ?: return
-        change { layout -> layout.copy(placements=layout.placements.map { if (it.photoId==id) it.rotated(15.0) else it }) };commit()
+        change { layout -> layout.positions { poses -> poses.map { if (it.photoId==id) it.rotated(15.0) else it } } };commit()
     }
-    fun arrange() { change { layout -> layout.copy(placements=state.value.project?.photos.orEmpty().mapIndexed { i,p -> LightTableLayout.initialPlacement(p.id,i) }) };commit() }
+    fun arrange() { change { layout -> layout.positions { state.value.filteredPhotos.mapIndexed { i,p -> LightTableLayout.initialPlacement(p.id,i) } } };commit() }
     fun page(delta: Int) {
-        val ids=state.value.project?.photos.orEmpty().map { it.id }
+        val ids=state.value.filteredPhotos.map { it.id }
         val next=(state.value.layout.page+delta).coerceIn(0,maxOf(0,(ids.size-1)/LIGHT_TABLE_PAGE_SIZE))
         if (next==state.value.layout.page) return
-        change { it.copy(page=next,selectedId=ids.getOrNull(next*LIGHT_TABLE_PAGE_SIZE)) };commit();loadPage()
+        change { it.copy(page=next,unfilteredPage=if (it.filter.active) it.unfilteredPage else next,selectedId=ids.getOrNull(next*LIGHT_TABLE_PAGE_SIZE)) };commit();loadPage()
     }
+    private fun reviewChange(block: (LightTableLayout,List<String>)->LightTableLayout) {
+        if (!state.value.layoutReady) return
+        val before=state.value.pagePhotos.map { it.id }
+        val ids=state.value.project?.photos.orEmpty().map { it.id }
+        change { block(it,ids) };commit()
+        if (active && before!=state.value.pagePhotos.map { it.id }) loadPage()
+    }
+    fun review(id: String,value: PhotoReview) { reviewChange { layout,ids -> layout.withReview(id,value,ids) } }
+    fun rate(id: String,value: Int) { reviewChange { layout,ids -> layout.withReview(id,(layout.reviews[id] ?: PhotoReview()).copy(rating=value),ids) } }
+    fun flag(id: String,value: ReviewFlag) { reviewChange { layout,ids -> layout.withReview(id,(layout.reviews[id] ?: PhotoReview()).copy(flag=value),ids) } }
+    fun color(id: String,value: ReviewColor) { reviewChange { layout,ids -> layout.withReview(id,(layout.reviews[id] ?: PhotoReview()).copy(color=value),ids) } }
+    fun pick(id: String) { reviewChange { layout,ids -> layout.withPicked(id,ids) } }
+    fun filter(value: ReviewFilter) { reviewChange { layout,ids -> layout.withFilter(value,ids) } }
     fun commit() {
         val snapshot=state.value;val id=snapshot.project?.id ?: return
         if (!snapshot.layoutReady) return

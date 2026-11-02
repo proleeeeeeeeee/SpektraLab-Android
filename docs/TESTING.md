@@ -1,5 +1,14 @@
 # Testing
 
+## Version 0.5.0-alpha.1 five-feature validation: 2026-11-02
+
+- The implementation accepted in local 0.5.0-dev.1 passed 62 core tests and 24 affected Android regressions (160.009 seconds runner time), with no failures or skips. Five earlier BW-grade device tests and the 60 native material combinations remain applicable; unaffected matrices were not repeated for a version-only change.
+- Negative tests cover actual touch sampling, exposure/white-balance sliders, rotation, photo switching, immutable whole-roll PNG snapshots, decoded pixels and unchanged originals. A failed capture retries through the UI after Activity stop/resume without duplicating a successful output; controlled orphan import recovery preserves indexed/queued/unknown files.
+- Actual positive-before/after-rotation screenshots and the G5 contact-sheet PDF caption were viewed. Prior real-photo contact-sheet evidence covers three fixtures repeated 13 times, 55 cell comparisons and 11 pages. Culling, layout/navigation and material comparison acceptance is recorded in [FEATURES-v05.md](FEATURES-v05.md).
+- Release metadata is increased to versionCode 7. The versioned arm64 build and all five targeted device smoke tests passed (57.623 seconds runner time); signature/16 KB ZIP/ELF/license checks passed. Full results accompany the release assets. CI validates the exact published source commit; emulator functional acceptance is separate from CI compilation.
+- Lint has zero errors and 14 baseline warnings. No private photographs, screenshots, keystores or local build outputs are committed or included in public archives.
+- Negative inversion remains 8-bit sRGB JPEG/PNG creative processing, with synthetic inputs rather than measured real-film calibration. No S25 Ultra, full 64-capture stress or actual OS process-kill validation. The shared MediaStore insertion-before-persistedURI forced-kill window can still leave an untracked pending row.
+
 ## Version 0.4.1-alpha.1 selector-art validation: 2026-11-02
 
 - The reported lower-option issue is reproduced in the previous source: Film uses a shared box drawing with color changes, while every Paper ID draws the same mountain. This is separate from the earlier main-photo preview regression. The existing design instead has four film cutouts and current-photo print samples; it has no separate Paper packaging assets.

@@ -30,6 +30,7 @@ data class EditRecipe(
     val framingY: Double = 0.5,
     val adjustments: Adjustments = Adjustments(),
     val composition: Composition = Composition(),
+    val paperGrade: PaperGrade = PaperGrade.GRADE_2,
 ) {
     init {
         require(framingX.isFinite() && framingX in 0.0..1.0)
