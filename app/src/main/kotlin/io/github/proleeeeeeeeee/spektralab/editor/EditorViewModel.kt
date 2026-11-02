@@ -85,7 +85,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             requests.debounce(120).collectLatest { request ->
                 if (request == null) return@collectLatest
-                mutableState.update { it.copy(rendering = true, error = null) }
+                // An automatic refresh after export must not dismiss its error.
+                mutableState.update { it.copy(rendering = true) }
                 try {
                     store.save(request.photo.copy(recipe = request.recipe))
                     val source = store.source(request.photo)
@@ -329,7 +330,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun showEditor() { mutableState.update { it.copy(showEditor = true) } }
     fun dismissError() { mutableState.update { it.copy(error = null) } }
     fun dismissSaved() { mutableState.update { it.copy(savedUri = null) } }
-    fun retryPreview() { if (state.value.ready) requestPreview() else initialize() }
+    fun retryPreview() { dismissError();if (state.value.ready) requestPreview() else initialize() }
 
     /** A gesture commits one undo step, rather than hundreds of pointer-move steps. */
     fun moveFraming(deltaX: Double, deltaY: Double) {

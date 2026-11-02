@@ -13,6 +13,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.proleeeeeeeeee.spektralab.core.FilmFrame
+import io.github.proleeeeeeeeee.spektralab.core.ExportFormat
+import io.github.proleeeeeeeeee.spektralab.core.ExportSettings
 import io.github.proleeeeeeeeee.spektralab.editor.EditorViewModel
 import org.junit.Assert.*
 import org.junit.Rule
@@ -22,6 +24,39 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PhotoWorkflowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test
+    fun unsupportedHdrPaperErrorSurvivesTheAutomaticPreviewRefresh() {
+        if (android.os.Build.VERSION.SDK_INT < 34) return
+        val resolver = compose.activity.contentResolver
+        val source = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME,"hdr-paper-error.png")
+            put(MediaStore.Images.Media.MIME_TYPE,"image/png");put(MediaStore.Images.Media.IS_PENDING,1)
+        })!!
+        try {
+            val bitmap = Bitmap.createBitmap(160,120,Bitmap.Config.ARGB_8888).apply { eraseColor(Color.GRAY) }
+            resolver.openOutputStream(source)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+            resolver.update(source,ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING,0) },null,null)
+            val model = ViewModelProvider(compose.activity)[EditorViewModel::class.java]
+            compose.waitUntil(120_000) { model.state.value.ready || model.state.value.error != null }
+            assertNull(model.state.value.error)
+            compose.runOnIdle { model.importPhoto(source) }
+            compose.waitUntil(120_000) { !model.state.value.importing && model.state.value.photo?.displayName == "hdr-paper-error.png" }
+            compose.runOnIdle { model.selectFilm("kodak_tri_x_400") }
+            compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.recipe.filmId == "kodak_tri_x_400" }
+            val beforeExport = model.state.value.preview
+            compose.runOnIdle { model.export(ExportSettings(ExportFormat.HDR_JPEG)) }
+            compose.waitUntil(120_000) { !model.state.value.exporting && model.state.value.error != null }
+            compose.waitUntil(120_000) {
+                val state = model.state.value
+                !state.rendering && state.preview != null && state.preview !== beforeExport
+            }
+            val message = model.state.value.error
+            assertNotNull("Automatic preview must retain the export failure",message)
+            assertTrue(message!!.contains("calibrated EDR",ignoreCase = true))
+            compose.onNodeWithText(message).assertIsDisplayed()
+        } finally { resolver.delete(source,null,null) }
+    }
 
     @Test
     fun importSelectFrameUndoAndExportPngWithoutNetworkPermission() {

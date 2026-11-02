@@ -3,7 +3,7 @@
 ## Version 0.3.0-alpha.1 validation: 2026-11-02
 
 - Eighteen core tests cover recipe compatibility/geometry, optional composition transfers, preset/queue serialization, format names and input bounds.
-- Eight Android instrumentation tests run the real Vulkan engine on API 35 SwiftShader, with no skipped cases.
+- Nine Android instrumentation tests run the real Vulkan engine on API 35 SwiftShader, with no skipped cases.
 - A generated 3000 × 64 RGB16 PNG exports at Original width 3000 in JPEG, PNG, TIFF16 and Ultra HDR, beyond the old 2560 px limit.
 - TIFF checks read actual BitsPerSample, ICC and unsigned samples: more than 256 distinct levels and values that are not an 8-bit-to-16-bit expansion.
 - Ultra HDR checks reopen the JPEG, find a gain map with spatial variation and highlight ratios above 1, and verify gain-map preservation after encoding.
@@ -12,6 +12,7 @@
 - Project tests restore multiple photos, presets, copied settings and a RUNNING queue from disk, retain target composition, and reject stale writes or resurrection after deletion.
 - The batch workflow imports two photographs, copies settings, saves a preset, cancels/resumes and verifies exactly one published PNG per job.
 - Existing material/frame, adjustment/composition, privacy, storage and Activity-recreation workflows remain covered.
+- An unsupported monochrome HDR export keeps its error visible after the automatic preview refresh.
 
 This is emulator validation, not a measurement of S25 Ultra RAW compatibility, Adreno memory limits or HDR panel/gallery appearance. No desktop color-parity claim is made. Original is subject to explicit memory/GPU limits; 50 MP/200 MP full-size processing is not guaranteed. The camera gain map is not retained as a separate scene-linear HDR source path. Standard PNG/JPEG remain 8-bit; RAW is input only. Keep the app open for processing and resume unfinished batch jobs after reopening it.
 
