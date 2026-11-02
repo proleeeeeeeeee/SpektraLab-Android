@@ -116,13 +116,13 @@ class NegativeScanInteractionTest {
             compose.onNodeWithTag("negative-step-preview").assertExists()
             val before = model.state.value.positive!!.getPixel(60, 40)
             compose.onNodeWithTag("negative-viewport").performScrollTo()
-            compose.onNodeWithContentDescription("创意反转正片预览").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Creative positive preview").assertIsDisplayed()
             screenshot(evidence, "01-sampled-positive")
 
-            dragSlider("曝光（EV）", .60f)
+            dragSlider("Exposure (EV)", .60f)
             compose.onNodeWithTag("negative-tool-balance").performScrollTo().performClick()
-            dragSlider("色温（冷暖）", .62f)
-            dragSlider("色调（绿／洋红）", .40f)
+            dragSlider("Temperature (cool / warm)", .62f)
+            dragSlider("Tint (green / magenta)", .40f)
             awaitPreview(model, photos[0].id)
             val graded = model.state.value.roll.settings
             assertTrue("Exposure slider must change the roll", graded.exposure > .1)
@@ -135,7 +135,7 @@ class NegativeScanInteractionTest {
             assertEquals(100, model.state.value.positive!!.width); assertEquals(200, model.state.value.positive!!.height)
             compose.onNodeWithTag("negative-viewport").performScrollTo()
             compose.onNodeWithTag("negative-step-sample").assertDoesNotExist()
-            compose.onNodeWithContentDescription("创意反转正片预览").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Creative positive preview").assertIsDisplayed()
             screenshot(evidence, "02-adjusted-rotated-positive")
 
             compose.onNodeWithTag("negative-roll-label").performScrollTo().assertIsDisplayed()
@@ -176,7 +176,7 @@ class NegativeScanInteractionTest {
                 } finally { decoded.recycle() }
             }
             assertEquals(jobs, store.load().jobs)
-            compose.onNodeWithText("导出队列：2 已保存，0 待处理，0 失败").performScrollTo()
+            compose.onNodeWithText("Export queue: 2 saved, 0 pending, 0 failed").performScrollTo()
             screenshot(evidence, "04-roll-png-export-complete")
             report.put("settings", Json.encodeToString(graded)).put("readback", checks).put("status", "PASS")
                 .put("coverage", "Pointer film-base sample; touch exposure/temperature/tint sliders; rotate; switch captures; PNG chip; all-roll checkbox; export button; output pixel/dimension and input SHA-256 checks")

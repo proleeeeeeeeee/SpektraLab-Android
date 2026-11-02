@@ -90,7 +90,7 @@ class ContactSheetWorkflowTest {
                 val all=current.photos.mapIndexed { index,p -> ContactSheetEntry(p.id,index+1,p.displayName,p.recipe,light.state.value.layout.reviews[p.id] ?: PhotoReview()) }
                 return ContactSheetSnapshot.selected(current.name,all,scope,settings)
             }
-            fun options() { compose.onNodeWithTag("review-export").performClick();compose.onNodeWithTag("review-contact-sheet").performClick();compose.onNodeWithTag("export-title").assertTextEquals("接触印样").assertIsDisplayed() }
+            fun options() { compose.onNodeWithTag("review-export").performClick();compose.onNodeWithTag("review-contact-sheet").performClick();compose.onNodeWithTag("export-title").assertTextEquals("Contact sheet").assertIsDisplayed() }
             fun save() { compose.onNodeWithTag("sheet-save").assertIsDisplayed().performClick() }
             fun finished(): List<Uri> {
                 compose.waitUntil(300_000) { !sheet.state.value.busy && (sheet.state.value.outputs.isNotEmpty() || sheet.state.value.error!=null) }
@@ -168,7 +168,7 @@ class ContactSheetWorkflowTest {
             val frozen=snapshot(ContactSheetSettings())
             options();compose.onNodeWithTag("sheet-scope-Picked").assertIsDisplayed()
             compose.runOnIdle { light.rate(ids[0],1);light.pick(ids[2]) }
-            compose.onNodeWithText("入选（2）").assertIsDisplayed()
+            compose.onNodeWithText("Picked (2)").assertIsDisplayed()
             compose.onNodeWithTag("sheet-scope-All photographs").performClick();capture("real-pdf-options");save()
             val pdf=finished();assertEquals(1,pdf.size);assertTrue(light.state.value.images.isEmpty());capture("real-pdf-saved")
             verify(pdf,frozen,"real-pdf",true);dismiss()

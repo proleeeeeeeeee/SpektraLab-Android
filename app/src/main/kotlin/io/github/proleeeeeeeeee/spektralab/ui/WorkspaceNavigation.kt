@@ -17,11 +17,11 @@ import io.github.proleeeeeeeeee.spektralab.core.*
 
 internal enum class WorkspacePage { PHOTOS, EDITOR, MATERIALS, NEGATIVE, SETTINGS }
 internal enum class WorkspaceOverlay { NONE, PHOTO_EXPORT, BATCH_EXPORT, PRESETS }
-internal enum class EditorPane(val title: String) { FILM("胶片"), PAPER("印相"), ADJUST("调整"), COMPOSE("构图") }
+internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print"), ADJUST("Adjust"), COMPOSE("Compose") }
 
 @Composable internal fun WorkspaceNavigation(page: WorkspacePage, enabled: Boolean, onSelect: (WorkspacePage) -> Unit) {
     NavigationBar(containerColor = PanelColor, windowInsets = WindowInsets(0, 0, 0, 0), modifier = Modifier.testTag("workspace-navigation")) {
-        listOf(Triple(WorkspacePage.PHOTOS, "照片", "photos"), Triple(WorkspacePage.MATERIALS, "材料", "materials"), Triple(WorkspacePage.NEGATIVE, "工具", "tools")).forEach { (target, label, tag) ->
+        listOf(Triple(WorkspacePage.PHOTOS, "Photos", "photos"), Triple(WorkspacePage.MATERIALS, "Materials", "materials"), Triple(WorkspacePage.NEGATIVE, "Tools", "tools")).forEach { (target, label, tag) ->
             NavigationBarItem(selected = page == target, onClick = { onSelect(target) }, enabled = enabled,
                 icon = { NavigationGlyph(target, if (page == target) AccentColor else MutedColor) }, label = { Text(label) },
                 modifier = Modifier.heightIn(min = 56.dp).testTag("nav-$tag"),
@@ -52,14 +52,14 @@ internal enum class EditorPane(val title: String) { FILM("胶片"), PAPER("印�
 }
 
 internal fun Adjustment.uiLabel(): String = when (this) {
-    Adjustment.EXPOSURE -> "曝光"; Adjustment.TEMPERATURE -> "色温"; Adjustment.TINT -> "色调"; Adjustment.CONTRAST -> "反差"
-    Adjustment.SATURATION -> "饱和度"; Adjustment.HIGHLIGHTS -> "高光"; Adjustment.SHADOWS -> "阴影"; Adjustment.GRAIN -> "颗粒"; Adjustment.HALATION -> "光晕"
+    Adjustment.EXPOSURE -> "Exposure"; Adjustment.TEMPERATURE -> "Temperature"; Adjustment.TINT -> "Tint"; Adjustment.CONTRAST -> "Contrast"
+    Adjustment.SATURATION -> "Saturation"; Adjustment.HIGHLIGHTS -> "Highlights"; Adjustment.SHADOWS -> "Shadows"; Adjustment.GRAIN -> "Grain"; Adjustment.HALATION -> "Halation"
 }
 internal fun FilmFrame.uiLabel(): String = when (this) {
-    FilmFrame.NONE -> "无片框"; FilmFrame.STRIP_135 -> "135 齿孔"; FilmFrame.FILED_135 -> "135 片边"; FilmFrame.SQUARE_120 -> "120 方形"; FilmFrame.XPAN -> "XPan"
+    FilmFrame.NONE -> "No frame"; FilmFrame.STRIP_135 -> "135 sprockets"; FilmFrame.FILED_135 -> "135 film edge"; FilmFrame.SQUARE_120 -> "120 square"; FilmFrame.XPAN -> "XPan"
 }
 internal fun uiMessage(message: String): String = when {
-    message.contains("cancelled", true) -> "本次导出已取消。可以使用保留的选择重新导出。"
-    message.contains("Processing cancelled", true) -> "处理已取消。"
+    message.contains("cancelled", true) -> "Export cancelled. You can export again with the saved selection."
+    message.contains("Processing cancelled", true) -> "Processing cancelled."
     else -> message
 }

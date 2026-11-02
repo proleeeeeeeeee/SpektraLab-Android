@@ -138,10 +138,10 @@ class CullingWorkflowTest {
             compose.onNodeWithTag("filter-minimum-rating").performSemanticsAction(SemanticsActions.SetProgress) { it(5f) }
             compose.onNodeWithTag("filter-flag-REJECT").performScrollTo().performClick()
             compose.onNodeWithTag("filter-apply").performClick();waitPage(0)
-            compose.onNodeWithText("没有符合筛选的照片").assertIsDisplayed();assertNull(light.state.value.layout.selectedId)
+            compose.onNodeWithText("No photos match the current filter").assertIsDisplayed();assertNull(light.state.value.layout.selectedId)
             compose.runOnIdle { val previous=model.state.value.selection;assertFalse(model.prepareBatchSelection(emptySet()));assertEquals(previous,model.state.value.selection);model.dismissNotice() }
             screenshot("review-empty-filter")
-            compose.onNodeWithText("清除筛选").performClick();waitPage(2)
+            compose.onNodeWithText("Clear filter").performClick();waitPage(2)
             assertEquals(originalPage,light.state.value.layout.page);assertEquals(original,light.state.value.layout.placements)
             compose.onNodeWithTag("review-filter").performClick()
             compose.onNodeWithTag("filter-minimum-rating").performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
@@ -196,7 +196,7 @@ class CullingWorkflowTest {
             outputs+=queue.jobs.mapNotNull { it.outputUri };assertEquals(2,outputs.size)
             waitPage(3);assertEquals(remembered.reviews,light.state.value.layout.reviews)
             screenshot("review-export-complete")
-            if (model.state.value.notice!=null) compose.onNodeWithText("知道了").performClick()
+            if (model.state.value.notice!=null) compose.onNodeWithText("Got it").performClick()
             compose.waitUntil(5_000) { model.state.value.notice==null }
             screenshot("review-after-picked-export")
             compose.onNodeWithTag("review-filter").performClick();compose.onNodeWithTag("filter-clear").performClick();waitPage(2)

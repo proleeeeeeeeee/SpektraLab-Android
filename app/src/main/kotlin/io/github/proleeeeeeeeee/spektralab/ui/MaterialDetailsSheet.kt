@@ -47,7 +47,7 @@ internal fun MaterialDetailsSheet(state: EditorState, tab: MaterialTab, material
     val stock = if (paper) Materials.paper(materialId) else null
     val title = if (paper) stock!!.brand + " " + stock.name else film!!.brand + " " + film.name
     val copy = if (paper) paperUiCopy(stock!!) else filmUiCopy(film!!)
-    val kind = if (paper) paperKind(stock!!) else if (film!!.monochrome) "黑白负片" else "彩色负片"
+    val kind = if (paper) paperKind(stock!!) else if (film!!.monochrome) "B&W negative" else "Color negative"
     val choices = if (paper) Materials.compatiblePapers(state.recipe.filmId).map { it.id to (it.brand + " " + it.name) }
         else Materials.films.map { it.id to (it.brand + " " + it.name) }
     var compare by rememberSaveable(tab, materialId, state.photo?.id) { mutableStateOf(false) }
@@ -77,7 +77,7 @@ internal fun MaterialDetailsSheet(state: EditorState, tab: MaterialTab, material
                 val b = worker.renderSource(file, currentRequest.photoId, info, currentRequest.alternative, 512)
                 value = ComparisonResult(currentRequest, a, b)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { value = ComparisonResult(currentRequest, error = failure.message ?: "比较暂不可用") }
+            catch (failure: Exception) { value = ComparisonResult(currentRequest, error = failure.message ?: "Comparison unavailable") }
             finally { worker?.close() }
             try { awaitCancellation() } finally { value = ComparisonResult(currentRequest) }
         }
@@ -88,31 +88,31 @@ internal fun MaterialDetailsSheet(state: EditorState, tab: MaterialTab, material
             .padding(horizontal = 20.dp, vertical = 8.dp).testTag("material-details-sheet")) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).testTag("material-details-title"))
-                TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("comparison-close")) { Text("关闭") }
+                TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("comparison-close")) { Text("Close") }
             }
             Text(kind, style = MaterialTheme.typography.labelMedium, color = AccentColor, modifier = Modifier.testTag("material-details-kind"))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(!compare, { compare = false }, label = { Text("特点") }, modifier = Modifier.heightIn(min = 48.dp).testTag("material-info"))
-                if (hasPhoto && choices.size > 1) FilterChip(compare, { compare = true }, label = { Text("比较") },
+                FilterChip(!compare, { compare = false }, label = { Text("Details") }, modifier = Modifier.heightIn(min = 48.dp).testTag("material-info"))
+                if (hasPhoto && choices.size > 1) FilterChip(compare, { compare = true }, label = { Text("Compare") },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("comparison-start"))
             }
             if (!compare) {
                 Text(copy.features, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 8.dp))
-                Text("适合题材", style = MaterialTheme.typography.labelLarge, color = AccentColor, modifier = Modifier.padding(top = 16.dp))
+                Text("Recommended subjects", style = MaterialTheme.typography.labelLarge, color = AccentColor, modifier = Modifier.padding(top = 16.dp))
                 Text(copy.subjects, style = MaterialTheme.typography.bodyMedium)
                 TextButton(onClick = { sourceExpanded = !sourceExpanded }, modifier = Modifier.heightIn(min = 48.dp).testTag("material-provenance-toggle")) {
-                    Text(if (sourceExpanded) "收起数据来源" else "数据来源与说明")
+                    Text(if (sourceExpanded) "Hide source details" else "Sources and notes")
                 }
                 if (sourceExpanded) Text(copy.source, style = MaterialTheme.typography.bodySmall, color = MutedColor, modifier = Modifier.testTag("material-provenance"))
-                if (hasPhoto && choices.size == 1) Text("当前胶片仅有这一种兼容印相材料。", style = MaterialTheme.typography.bodySmall,
+                if (hasPhoto && choices.size == 1) Text("Only this print material is compatible with the current film.", style = MaterialTheme.typography.bodySmall,
                     color = MutedColor, modifier = Modifier.padding(vertical = 8.dp).testTag("material-single-compatible"))
                 if (!hasPhoto) TextButton(onClick = { onClose(); onChoosePhoto() },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("material-details-choose-photo")) { Text("选择照片看效果") }
-                Text("建议仅作创作起点。曝光、显影和观看条件都会影响结果。", fontSize = 11.sp, color = MutedColor, modifier = Modifier.padding(vertical = 12.dp))
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("material-details-choose-photo")) { Text("Select a photo to preview the effect") }
+                Text("Use this as a creative starting point. Exposure, processing, and viewing conditions all affect the result.", fontSize = 11.sp, color = MutedColor, modifier = Modifier.padding(vertical = 12.dp))
             } else {
                 Box {
                     TextButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("comparison-choice")) {
-                        Text("对比  " + choices.first { it.first == alternativeId }.second)
+                        Text("Compare  " + choices.first { it.first == alternativeId }.second)
                     }
                     DropdownMenu(menu, { menu = false }, Modifier.heightIn(max = 320.dp)) {
                         choices.filter { it.first != materialId }.forEach { choice ->
@@ -133,12 +133,12 @@ internal fun MaterialDetailsSheet(state: EditorState, tab: MaterialTab, material
                     }
                 } else Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
                     if (visible?.error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("比较暂不可用", style = MaterialTheme.typography.bodyMedium)
-                        TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp).testTag("comparison-retry")) { Text("重试比较") }
+                        Text("Comparison unavailable", style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp).testTag("comparison-retry")) { Text("Retry comparison") }
                     } else CircularProgressIndicator(Modifier.size(24.dp))
                 }
                 Button(onClick = { onApply(alternativeId); onClose() }, enabled = visible?.alternative != null,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 8.dp).testTag("comparison-apply")) { Text("应用备选材料") }
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 8.dp).testTag("comparison-apply")) { Text("Apply alternative material") }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -148,8 +148,8 @@ internal fun MaterialDetailsSheet(state: EditorState, tab: MaterialTab, material
 @Composable
 private fun ComparisonPhoto(image: Bitmap, recipe: EditRecipe, current: Boolean, modifier: Modifier) {
     Column(modifier) {
-        Text(if (current) "当前" else "备选", fontSize = 11.sp, color = MutedColor)
-        Image(image.asImageBitmap(), if (current) "当前材料效果" else "备选材料效果",
+        Text(if (current) "Current" else "Alternative", fontSize = 11.sp, color = MutedColor)
+        Image(image.asImageBitmap(), if (current) "Current material" else "Alternative material",
             Modifier.fillMaxWidth().height(180.dp).background(CanvasColor).testTag(if (current) "comparison-current" else "comparison-alternative"), contentScale = ContentScale.Fit)
         Text(Materials.film(recipe.filmId).name + " / " + Materials.paper(recipe.paperId).name, fontSize = 11.sp, maxLines = 3)
     }

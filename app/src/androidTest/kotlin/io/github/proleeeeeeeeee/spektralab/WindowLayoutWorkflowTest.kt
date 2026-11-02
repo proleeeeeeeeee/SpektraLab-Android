@@ -59,7 +59,13 @@ class WindowLayoutWorkflowTest {
             capture("board")
             val board=compose.onNodeWithTag("light-table-board").fetchSemanticsNode().boundsInRoot
             assertTrue("Light table area collapsed: $board",board.width>=120*density && board.height>=120*density)
-            if (light.state.value.layout.loupeEnabled) clickReachable(compose.onNodeWithTag("table-loupe"))
+            if (light.state.value.layout.loupeEnabled) {
+                if (compose.onAllNodesWithTag("table-loupe").fetchSemanticsNodes().isEmpty()) {
+                    clickReachable(compose.onNodeWithTag("table-controls"))
+                    clickReachable(compose.onNodeWithTag("table-loupe"))
+                    clickReachable(compose.onNodeWithTag("table-controls-done"))
+                } else clickReachable(compose.onNodeWithTag("table-loupe"))
+            }
             val initial=light.state.value.layout.displayPlacements.first()
             val center=Offset((initial.x*board.width).toFloat(),(initial.y*board.height).toFloat())
             compose.onNodeWithTag("light-table-board").performTouchInput { swipe(center,center+Offset(board.width*.08f,board.height*.10f),500) }

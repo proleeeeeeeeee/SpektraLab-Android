@@ -33,11 +33,11 @@ class NegativeScanEntryTest {
         compose.waitForIdle()
         compose.onNodeWithTag("negative-screen").assertExists()
         compose.onNodeWithTag("negative-calibration").performScrollTo().performClick()
-        compose.onNodeWithText("尚不提供校准重建").assertIsDisplayed()
+        compose.onNodeWithText("Calibrated reconstruction is not available").assertIsDisplayed()
         capture("calibration-disclosure.png")
-        compose.onNodeWithText("知道了").performClick()
+        compose.onNodeWithText("Got it").performClick()
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.waitForIdle()
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("photos-workspace").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("photos-workspace").assertExists()
         assertEquals("Independent scan work must preserve all positive projects, recipes and export jobs",
             library, editor().state.value.library)
@@ -45,7 +45,8 @@ class NegativeScanEntryTest {
         assertNull(negative().state.value.positive)
         compose.onNodeWithTag("nav-tools").performClick()
         compose.waitUntil(20_000) { negative().state.value.ready && !negative().state.value.loading }
-        compose.onNodeWithContentDescription("返回照片入口").performClick()
+        compose.onNodeWithTag("negative-back").performScrollTo().performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("photos-workspace").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("photos-workspace").assertExists()
         assertEquals(library, editor().state.value.library)
     }

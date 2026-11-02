@@ -33,10 +33,10 @@ internal fun ContactSheetOptions(draft: ContactSheetDraft, ready: Boolean,
     val picked = draft.layout.pickedIds.intersect(validIds)
     val page = filtered.drop(draft.layout.page * LIGHT_TABLE_PAGE_SIZE).take(LIGHT_TABLE_PAGE_SIZE).toSet()
     val scopes = buildList {
-        add(SheetScope("Picked", "入选", picked))
-        if (draft.layout.filter.active) add(SheetScope("Filtered", "当前筛选", filtered.toSet()))
-        add(SheetScope("Visible page", "当前页", page))
-        add(SheetScope("All photographs", "整个项目", validIds))
+        add(SheetScope("Picked", "Selected", picked))
+        if (draft.layout.filter.active) add(SheetScope("Filtered", "Current filter", filtered.toSet()))
+        add(SheetScope("Visible page", "Current page", page))
+        add(SheetScope("All photographs", "Entire project", validIds))
     }
     val initialScope = when {
         picked.isNotEmpty() -> "Picked"
@@ -58,19 +58,19 @@ internal fun ContactSheetOptions(draft: ContactSheetDraft, ready: Boolean,
     val pages = (chosen.size + settings.capacity - 1) / settings.capacity
     val files = if (format == ContactSheetFormat.JPEG) pages else (pages + settings.pdfPagesPerPart - 1) / settings.pdfPagesPerPart
     val disabledReason = when {
-        chosen.isEmpty() -> "这个范围没有照片，请选择其他范围或返回选片。"
-        !ready -> "导出引擎正在准备，请稍候。"
-        starting -> "正在创建接触印样…"
+        chosen.isEmpty() -> "There are no photos in this range. Choose another range or return to selection."
+        !ready -> "The export engine is getting ready. Please wait."
+        starting -> "Creating contact sheet…"
         else -> failure
     }
     val allowed = ready && chosen.isNotEmpty() && !starting
     ModalBottomSheet(onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         ExportSheetFrame(
-            title = "接触印样",
-            summary = "${chosen.size} 张照片 · $pages 页 · $files 个 ${if (format == ContactSheetFormat.PDF) "PDF" else "JPG"} 文件",
+            title = "Contact sheet",
+            summary = "${chosen.size} photos · $pages pages · $files ${if (format == ContactSheetFormat.PDF) "PDF" else "JPG"} files",
             onClose = onClose,
-            actionLabel = if (starting) "正在准备…" else "保存接触印样",
+            actionLabel = if (starting) "Preparing…" else "Save contact sheet",
             actionEnabled = allowed,
             disabledReason = disabledReason,
             actionTestTag = "sheet-save",
@@ -82,21 +82,21 @@ internal fun ContactSheetOptions(draft: ContactSheetDraft, ready: Boolean,
                     onClose()
                 } catch (error: IllegalArgumentException) {
                     starting = false
-                    failure = error.message ?: "版式或范围无效，请调整后重试。"
+                    failure = error.message ?: "The layout or range is invalid. Adjust it and try again."
                 }
             },
         ) {
-            ExportSectionTitle("照片范围")
-            Text("使用打开此页时的照片、配方和评级。", color = MutedColor,
+            ExportSectionTitle("Photo range")
+            Text("Uses the photos, recipes, and ratings captured when this sheet was opened.", color = MutedColor,
                 style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 scopes.forEach { value ->
                     FilterChip(scope == value.id, { scope = value.id; failure = null },
-                        enabled = value.ids.isNotEmpty(), label = { Text("${value.label}（${value.ids.size}）") },
+                        enabled = value.ids.isNotEmpty(), label = { Text("${value.label} (${value.ids.size})") },
                         modifier = Modifier.heightIn(min = 48.dp).testTag("sheet-scope-${value.id}"))
                 }
             }
-            ExportSectionTitle("文件格式")
+            ExportSectionTitle("File format")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ContactSheetFormat.entries.forEach { kind ->
                     FilterChip(format == kind, { format = kind },
@@ -104,25 +104,25 @@ internal fun ContactSheetOptions(draft: ContactSheetDraft, ready: Boolean,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("sheet-format-${kind.name}"))
                 }
             }
-            ExportSectionTitle("页面版式")
+            ExportSectionTitle("Page layout")
             OutlinedButton(onClick = { expanded = !expanded },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("sheet-layout-toggle")) {
-                Text("A4 ${if (orientation == SheetOrientation.PORTRAIT) "竖版" else "横版"} · $columns 列 × $rows 行 · ${if (expanded) "收起" else "调整"}")
+                Text("A4 ${if (orientation == SheetOrientation.PORTRAIT) "Portrait" else "Landscape"} · $columns columns × $rows rows · ${if (expanded) "Collapse" else "Adjust"}")
             }
             if (expanded) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SheetOrientation.entries.forEach { kind ->
                         FilterChip(orientation == kind, { orientation = kind },
-                            label = { Text(if (kind == SheetOrientation.PORTRAIT) "竖版" else "横版") },
+                            label = { Text(if (kind == SheetOrientation.PORTRAIT) "Portrait" else "Landscape") },
                             modifier = Modifier.heightIn(min = 48.dp).testTag("sheet-orientation-${kind.name}"))
                     }
                 }
-                Text("每页列数", style = MaterialTheme.typography.bodyMedium)
+                Text("Columns per page", style = MaterialTheme.typography.bodyMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     (2..4).forEach { count -> FilterChip(columns == count, { columns = count }, label = { Text(count.toString()) },
                         modifier = Modifier.heightIn(min = 48.dp).testTag("sheet-columns-$count")) }
                 }
-                Text("每页行数", style = MaterialTheme.typography.bodyMedium)
+                Text("Rows per page", style = MaterialTheme.typography.bodyMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     (2..5).forEach { count -> FilterChip(rows == count, { rows = count }, label = { Text(count.toString()) },
                         modifier = Modifier.heightIn(min = 48.dp).testTag("sheet-rows-$count")) }
@@ -132,12 +132,12 @@ internal fun ContactSheetOptions(draft: ContactSheetDraft, ready: Boolean,
                 .toggleable(ratings, role = Role.Checkbox, onValueChange = { ratings = it })
                 .testTag("sheet-ratings"), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(ratings, onCheckedChange = null)
-                Text("附带评级与标记", style = MaterialTheme.typography.bodyMedium)
+                Text("Include ratings and marks", style = MaterialTheme.typography.bodyMedium)
             }
-            ExportSectionTitle("保存位置")
-            Text("文件 / Downloads / SpektraLab", color = MutedColor,
+            ExportSectionTitle("Save location")
+            Text("Files / Downloads / SpektraLab", color = MutedColor,
                 style = MaterialTheme.typography.bodyMedium)
-            Text("JPG 页面最长边 2400 像素。大 PDF 会分为编号文件。请保持应用在前台；离开后可用原选择重试，原片不会改变。",
+            Text("JPG pages have a 2400 px long edge. Large PDFs are split into numbered files. Keep the app in the foreground; you can retry with the same selection. Originals remain unchanged.",
                 color = MutedColor, style = MaterialTheme.typography.bodySmall)
         }
     }

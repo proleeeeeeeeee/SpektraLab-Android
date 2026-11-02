@@ -52,14 +52,14 @@ internal fun MaterialBrowserContent(
     val paperChoices = if (hasPhoto) Materials.compatiblePapers(state.recipe.filmId) else Materials.papers
     val artwork = if (paper && hasPhoto) rememberPaperSamples(state) else PaperSamplePresentation(PaperSampleState(), {})
     val choices = if (paper) paperChoices.map { MaterialBrowserEntry(it.id, it.brand, it.name, paperKind(it), paperUiCopy(it).features) }
-        else Materials.films.map { MaterialBrowserEntry(it.id, it.brand, it.name, if (it.monochrome) "黑白负片" else "彩色负片", filmUiCopy(it).features) }
+        else Materials.films.map { MaterialBrowserEntry(it.id, it.brand, it.name, if (it.monochrome) "B&W negative" else "Color negative", filmUiCopy(it).features) }
     val selected = choices.first { it.id == selectedId }
     val rail = rememberLazyListState()
     LaunchedEffect(tab, state.photo?.id) { rail.scrollToItem(choices.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)) }
     val panel: @Composable (Modifier) -> Unit = { panelModifier ->
         Column(panelModifier.background(PanelColor).verticalScroll(rememberScrollState()).testTag("material-browser-options-panel")) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for ((value, label) in listOf(MaterialTab.FILM to "胶片", MaterialTab.PAPER to "印相材料")) {
+                for ((value, label) in listOf(MaterialTab.FILM to "Film", MaterialTab.PAPER to "Print material")) {
                     FilterChip(selected = tab == value, onClick = { tab = value; onTab(value) }, label = { Text(label) },
                         modifier = Modifier.heightIn(min = 48.dp).testTag(if (value == MaterialTab.FILM) "material-tab-film" else "material-tab-paper"))
                 }
@@ -82,22 +82,22 @@ internal fun MaterialBrowserContent(
                     color = PaperWhite, modifier = Modifier.testTag("material-selected-name"))
                 Text(selected.features, style = MaterialTheme.typography.bodySmall, color = MutedColor)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (paper && hasPhoto) "仅显示与当前胶片兼容的材料" else "${choices.size} 种${if (paper) "印相材料" else "胶片"}", fontSize = 11.sp, color = MutedColor,
+                    Text(if (paper && hasPhoto) "Showing only materials compatible with the current film" else "${choices.size} ${if (paper) "Print material" else "Film"}", fontSize = 11.sp, color = MutedColor,
                         modifier = Modifier.weight(1f).padding(end = 8.dp))
-                    TextButton(onClick = { details = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("material-details")) { Text("特点与比较") }
+                    TextButton(onClick = { details = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("material-details")) { Text("Details and comparison") }
                 }
             }
             if (paper && hasPhoto) PaperGradeControls(state.recipe, onGrade)
             if (artwork.state.failed.isNotEmpty()) TextButton(onClick = artwork.retry,
-                modifier = Modifier.padding(horizontal = 12.dp).heightIn(min = 48.dp).testTag("paper-samples-retry")) { Text("重新生成小样") }
+                modifier = Modifier.padding(horizontal = 12.dp).heightIn(min = 48.dp).testTag("paper-samples-retry")) { Text("Regenerate samples") }
             Spacer(Modifier.height(8.dp))
         }
     }
     Column(modifier.fillMaxSize().background(CanvasColor).testTag("material-browser")) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("材料", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            if (onSettings != null) TextButton(onClick = onSettings, modifier = Modifier.heightIn(min = 48.dp).testTag("material-browser-settings")) { Text("设置") }
-            else TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp).testTag("material-browser-done")) { Text("完成") }
+            Text("Materials", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (onSettings != null) TextButton(onClick = onSettings, modifier = Modifier.heightIn(min = 48.dp).testTag("material-browser-settings")) { Text("Settings") }
+            else TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp).testTag("material-browser-done")) { Text("Done") }
         }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val availableWidth = maxWidth
@@ -143,15 +143,15 @@ private fun BrowserMaterialChoice(item: MaterialBrowserEntry, selected: Boolean,
 private fun MaterialBrowserPreview(state: EditorState, hasPhoto: Boolean, onChoosePhoto: () -> Unit, modifier: Modifier) {
     Box(modifier.background(CanvasColor).padding(12.dp), contentAlignment = Alignment.Center) {
         if (!hasPhoto) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("选择照片看效果", style = MaterialTheme.typography.titleMedium, color = PaperWhite)
-            Text("可以先浏览材料的特点与来源", style = MaterialTheme.typography.bodySmall, color = MutedColor)
-            TextButton(onClick = onChoosePhoto, modifier = Modifier.heightIn(min = 48.dp).testTag("material-browser-choose-photo")) { Text("选择照片") }
+            Text("Select a photo to preview the effect", style = MaterialTheme.typography.titleMedium, color = PaperWhite)
+            Text("You can browse material details and sources first", style = MaterialTheme.typography.bodySmall, color = MutedColor)
+            TextButton(onClick = onChoosePhoto, modifier = Modifier.heightIn(min = 48.dp).testTag("material-browser-choose-photo")) { Text("Select photo") }
         } else {
             val showingOriginal = state.preview == null
             val image = state.preview ?: state.original
-            if (image != null) Image(image.asImageBitmap(), if (showingOriginal) "原片" else "当前材料效果",
+            if (image != null) Image(image.asImageBitmap(), if (showingOriginal) "Original" else "Current material",
                 Modifier.fillMaxSize().testTag("material-browser-preview"), contentScale = ContentScale.Fit)
-            if (showingOriginal) Text(if (state.rendering) "原片 · 正在显影" else "原片 · 预览暂不可用",
+            if (showingOriginal) Text(if (state.rendering) "Original · Processing" else "Original · Preview unavailable",
                 color = MutedColor, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopStart).background(PanelColor).padding(8.dp))
         }
     }

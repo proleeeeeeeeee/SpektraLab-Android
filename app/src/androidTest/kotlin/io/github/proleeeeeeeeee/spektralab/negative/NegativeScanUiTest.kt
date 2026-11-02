@@ -37,9 +37,9 @@ class NegativeScanUiTest {
             compose.onNodeWithTag("negative-empty").performScrollTo().assertIsDisplayed()
             compose.onNodeWithTag("negative-import").assertIsEnabled()
             compose.onNodeWithTag("negative-calibration").performClick()
-            compose.onNodeWithText("尚不提供校准重建").assertIsDisplayed()
-            compose.onNodeWithText("知道了").performClick()
-            compose.onNodeWithText("返回").performScrollTo().performClick()
+            compose.onNodeWithText("Calibrated reconstruction is not available").assertIsDisplayed()
+            compose.onNodeWithText("Got it").performClick()
+            compose.onNodeWithText("Back").performScrollTo().performClick()
             assertTrue(returned)
         } finally { compose.runOnIdle { model.pause() }; File(context.filesDir, directory).deleteRecursively() }
     }

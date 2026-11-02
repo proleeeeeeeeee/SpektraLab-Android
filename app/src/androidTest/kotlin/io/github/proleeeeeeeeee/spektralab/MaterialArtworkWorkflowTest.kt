@@ -145,7 +145,7 @@ class MaterialArtworkWorkflowTest {
             compose.onNodeWithTag("material-tab-film").performClick();compose.onNodeWithTag("material-tab-paper").performClick()
             compose.waitUntil(120_000) { !samples.state.value.loading && samples.state.value.failed.size==8 }
             assertTrue(samples.state.value.images.isEmpty())
-            assertTrue(compose.onAllNodesWithText("小样暂不可用").fetchSemanticsNodes().isNotEmpty());screenshot("paper-unavailable")
+            assertTrue(compose.onAllNodesWithText("Sample unavailable").fetchSemanticsNodes().isNotEmpty());screenshot("paper-unavailable")
             file!!.writeBytes(backup!!)
             compose.onNodeWithTag("paper-samples-retry").performClick();waitSamples(8)
             compose.onNodeWithTag("material-tab-film").performClick();rail.performScrollToNode(hasText("Tri-X 400"));compose.onNodeWithText("Tri-X 400").performClick()

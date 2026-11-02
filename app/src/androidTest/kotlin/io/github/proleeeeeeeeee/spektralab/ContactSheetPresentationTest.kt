@@ -29,16 +29,16 @@ class ContactSheetPresentationTest {
                 SpektraTheme {
                     Surface {
                         Box(Modifier.size(320.dp, 520.dp)) {
-                            ExportSheetFrame("接触印样", "尚未选择照片", {}, "保存接触印样", false, {},
-                                disabledReason = "请先选择照片。", actionTestTag = "presentation-action") {
-                                repeat(40) { Text("版式字段 $it", Modifier.testTag("field-$it")) }
+                            ExportSheetFrame("Contact sheet", "No photos selected", {}, "Save contact sheet", false, {},
+                                disabledReason = "Select photos first.", actionTestTag = "presentation-action") {
+                                repeat(40) { Text("Layout field $it", Modifier.testTag("field-$it")) }
                             }
                         }
                     }
                 }
             }
         }
-        compose.onNodeWithTag("export-disabled-reason").assertIsDisplayed().assertTextEquals("请先选择照片。")
+        compose.onNodeWithTag("export-disabled-reason").assertIsDisplayed().assertTextEquals("Select photos first.")
         compose.onNodeWithTag("presentation-action").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithTag("field-39").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("presentation-action").assertIsDisplayed()
@@ -49,7 +49,7 @@ class ContactSheetPresentationTest {
         val submitted = mutableListOf<ExportSettings>()
         compose.setContent {
             SpektraTheme { Surface { Box(Modifier.size(360.dp, 560.dp)) {
-                PhotoExportOptions(onSave = { submitted += it }, photoCount = 2, scopeSummary = "入选的 2 张照片")
+                PhotoExportOptions(onSave = { submitted += it }, photoCount = 2, scopeSummary = "2 picked photos")
             } } }
         }
         compose.onNodeWithTag("photo-format-PNG").performScrollTo().performClick()
@@ -64,11 +64,11 @@ class ContactSheetPresentationTest {
     @Test fun unavailableHdrExplainsTheRestrictionWithoutBlockingJpeg() {
         compose.setContent {
             SpektraTheme { Surface { Box(Modifier.size(360.dp, 560.dp)) {
-                PhotoExportOptions(onSave = {}, hdrAvailable = false, hdrUnavailableReason = "当前设备不支持 Ultra HDR。")
+                PhotoExportOptions(onSave = {}, hdrAvailable = false, hdrUnavailableReason = "Ultra HDR is not supported on this device.")
             } } }
         }
         compose.onNodeWithTag("photo-format-HDR_JPEG").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("当前设备不支持 Ultra HDR。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ultra HDR is not supported on this device.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("photo-export-save").assertIsDisplayed().assertIsEnabled()
     }
 

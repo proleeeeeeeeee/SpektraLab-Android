@@ -33,7 +33,7 @@ import io.github.proleeeeeeeeee.spektralab.editor.EditorViewModel
 import java.util.Locale
 import kotlin.math.*
 
-internal enum class EditorTool(val label: String) { LOOKS("外观"), ADJUST("调整"), COMPOSE("构图") }
+internal enum class EditorTool(val label: String) { LOOKS("Look"), ADJUST("Adjust"), COMPOSE("Compose") }
 
 @Composable
 internal fun AdjustmentControls(state: EditorState, model: EditorViewModel) {
@@ -52,13 +52,13 @@ internal fun AdjustmentControls(state: EditorState, model: EditorViewModel) {
         }
         Slider(value = selected.read(a), onValueChange = { model.adjust(selected, it) },
             onValueChangeFinished = model::finishInteraction, valueRange = selected.minimum..selected.maximum,
-            modifier = Modifier.padding(horizontal = 16.dp).semantics { contentDescription = selected.uiLabel() + "调整" })
+            modifier = Modifier.padding(horizontal = 16.dp).semantics { contentDescription = selected.uiLabel() + " adjustment" })
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("自动曝光", Modifier.weight(1f), color = MutedColor, fontSize = 12.sp)
+            Text("Auto exposure", Modifier.weight(1f), color = MutedColor, fontSize = 12.sp)
             Switch(checked = a.autoExposure, onCheckedChange = model::autoExposure,
-                modifier = Modifier.semantics { contentDescription = "自动曝光" })
-            TextButton(onClick = { model.adjust(selected, selected.initial); model.finishInteraction() }) { Text("重置此项") }
-            TextButton(onClick = model::resetAdjustments) { Text("重置全部") }
+                modifier = Modifier.semantics { contentDescription = "Auto exposure" })
+            TextButton(onClick = { model.adjust(selected, selected.initial); model.finishInteraction() }) { Text("Reset this adjustment") }
+            TextButton(onClick = model::resetAdjustments) { Text("Reset all") }
         }
     }
 }
@@ -81,22 +81,22 @@ internal fun CompositionControls(state: EditorState, model: EditorViewModel, onC
             }
         }
         if (state.recipe.frame != FilmFrame.NONE)
-            Text("当前片框决定画面比例。", Modifier.padding(horizontal = 20.dp), color = MutedColor, fontSize = 12.sp)
+            Text("The current film frame sets the image ratio.", Modifier.padding(horizontal = 20.dp), color = MutedColor, fontSize = 12.sp)
         LazyRow(contentPadding = PaddingValues(horizontal = 8.dp)) {
-            item { TextButton(onClick = onCrop) { Text("自由裁切") } }
-            item { TextButton(onClick = model::rotate) { Text("旋转 90°") } }
-            item { TextButton(onClick = { model.flip(true) }) { Text("水平翻转") } }
-            item { TextButton(onClick = { model.flip(false) }) { Text("垂直翻转") } }
-            item { TextButton(onClick = model::resetComposition) { Text("重置构图") } }
+            item { TextButton(onClick = onCrop) { Text("Free crop") } }
+            item { TextButton(onClick = model::rotate) { Text("Rotate 90°") } }
+            item { TextButton(onClick = { model.flip(true) }) { Text("Flip horizontally") } }
+            item { TextButton(onClick = { model.flip(false) }) { Text("Flip vertically") } }
+            item { TextButton(onClick = model::resetComposition) { Text("Reset composition") } }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("校正倾斜", Modifier.weight(1f), fontSize = 12.sp)
+            Text("Straighten", Modifier.weight(1f), fontSize = 12.sp)
             Text(String.format(Locale.ROOT, "%+.1f°", c.straighten), color = AccentColor, fontSize = 12.sp)
-            TextButton(onClick = { model.straighten(0f); model.finishInteraction() }) { Text("重置") }
+            TextButton(onClick = { model.straighten(0f); model.finishInteraction() }) { Text("Reset") }
         }
         Slider(value = c.straighten.toFloat(), onValueChange = model::straighten,
             onValueChangeFinished = model::finishInteraction, valueRange = -15f..15f,
-            modifier = Modifier.padding(horizontal = 16.dp).semantics { contentDescription = "校正角度" })
+            modifier = Modifier.padding(horizontal = 16.dp).semantics { contentDescription = "Straighten angle" })
     }
 }
 
@@ -107,29 +107,29 @@ internal fun CropSheet(bitmap: Bitmap, initial: CropRect, onCancel: () -> Unit, 
     ModalBottomSheet(onDismissRequest = onCancel, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("裁切照片", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onCancel) { Text("取消") }
-                TextButton(onClick = { onApply(draft) }) { Text("应用裁切") }
+                Text("Crop photo", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = onCancel) { Text("Cancel") }
+                TextButton(onClick = { onApply(draft) }) { Text("Apply crop") }
             }
-            Text("拖动角点裁切，拖动画面内部移动。", color = MutedColor, fontSize = 12.sp)
+            Text("Drag a corner to crop, or drag inside the image to reposition it.", color = MutedColor, fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
             CropCanvas(bitmap, draft, { draft = it }, Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 380.dp).aspectRatio(1f))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("原片保持不变。", color = MutedColor, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = { draft = CropRect() }) { Text("使用完整画面") }
+                Text("The original remains unchanged.", color = MutedColor, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { draft = CropRect() }) { Text("Use full image") }
             }
             // Sliders provide reachable alternatives when crop handles are near an edge.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("宽度", Modifier.width(54.dp), fontSize = 12.sp)
+                Text("Width", Modifier.width(54.dp), fontSize = 12.sp)
                 Slider(draft.width.toFloat(), { v ->
                     val w = v.toDouble(); draft = draft.copy(x = min(draft.x, 1-w), width = w)
-                }, valueRange = .05f..1f, modifier = Modifier.weight(1f).semantics { contentDescription = "裁切宽度" })
+                }, valueRange = .05f..1f, modifier = Modifier.weight(1f).semantics { contentDescription = "Crop width" })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("高度", Modifier.width(54.dp), fontSize = 12.sp)
+                Text("Height", Modifier.width(54.dp), fontSize = 12.sp)
                 Slider(draft.height.toFloat(), { v ->
                     val h = v.toDouble(); draft = draft.copy(y = min(draft.y, 1-h), height = h)
-                }, valueRange = .05f..1f, modifier = Modifier.weight(1f).semantics { contentDescription = "裁切高度" })
+                }, valueRange = .05f..1f, modifier = Modifier.weight(1f).semantics { contentDescription = "Crop height" })
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -146,8 +146,8 @@ private fun CropCanvas(bitmap: Bitmap, crop: CropRect, onChange: (CropRect) -> U
         val imageWidth = if (sourceAspect > availableAspect) maxWidth else maxHeight * sourceAspect
         val imageHeight = imageWidth / sourceAspect
         Box(Modifier.size(imageWidth, imageHeight).align(Alignment.Center)) {
-            Image(bitmap.asImageBitmap(), "裁切原图", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-            Canvas(Modifier.fillMaxSize().semantics { contentDescription = "拖动裁切角点或移动裁切区域" }
+            Image(bitmap.asImageBitmap(), "Crop original", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            Canvas(Modifier.fillMaxSize().semantics { contentDescription = "Drag crop corners or move the crop area" }
                 .pointerInput(bitmap) {
                     var handle = -1
                     detectDragGestures(onDragStart = { position ->

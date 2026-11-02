@@ -32,7 +32,7 @@ class MaterialBrowserTest {
             }
         }
         compose.onNodeWithTag("material-browser-preview").assertDoesNotExist()
-        compose.onNodeWithText("选择照片看效果").assertIsDisplayed()
+        compose.onNodeWithText("Select a photo to preview the effect").assertIsDisplayed()
         val rail=compose.onNodeWithTag("material-options")
         for (film in Materials.films) {
             rail.performScrollToNode(hasTestTag("material-choice-${film.id}"))
@@ -53,7 +53,7 @@ class MaterialBrowserTest {
         rail.performScrollToNode(hasTestTag("material-choice-ilford_multigrade_iv_rc"))
         compose.onNodeWithTag("material-choice-ilford_multigrade_iv_rc").performClick()
         compose.onNodeWithTag("material-details").performScrollTo().performClick()
-        compose.onNodeWithTag("material-details-kind").assertTextEquals("黑白相纸")
+        compose.onNodeWithTag("material-details-kind").assertTextEquals("B&W paper")
         compose.onNodeWithTag("comparison-start").assertDoesNotExist()
         compose.onNodeWithTag("comparison-current").assertDoesNotExist()
         compose.onNodeWithTag("material-provenance-toggle").performScrollTo().performClick()

@@ -146,7 +146,7 @@ class NegativeScanWizardTest {
             compose.setContent { SpektraTheme { NegativeScanScreen(onBack = {}, model = model) } }
             compose.waitUntil(10_000) { model.state.value.ready }
             compose.onNodeWithTag("negative-export").assertDoesNotExist()
-            compose.onNodeWithText("开始片基取样").performScrollTo().assertIsEnabled().performClick()
+            compose.onNodeWithText("Start film-base sampling").performScrollTo().assertIsEnabled().performClick()
             compose.onNodeWithTag("negative-step-sample").assertExists()
             compose.onNodeWithTag("negative-export").assertDoesNotExist()
             compose.onNodeWithTag("negative-sample-cancel").performScrollTo().performClick()

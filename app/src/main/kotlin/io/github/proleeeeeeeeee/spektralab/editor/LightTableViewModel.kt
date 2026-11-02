@@ -61,7 +61,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (failure: Exception) {
                     if (generation == token) mutableState.update {
-                        it.copy(loading = false, error = "无法读取项目标记，请重试。已有布局未被覆盖。")
+                        it.copy(loading = false, error = "Could not load project marks. Try again. Your existing layout was not changed.")
                     }
                     return@launch
                 }
@@ -114,7 +114,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
                     catch (_: Exception) { if (generation==token) mutableState.update { it.copy(failed=it.failed+photo.id) } }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (generation==token) mutableState.update { it.copy(error=failure.message ?: "无法生成预览，请重试") } }
+            catch (failure: Exception) { if (generation==token) mutableState.update { it.copy(error=failure.message ?: "Could not generate the preview. Try again.") } }
             finally { if (generation==token) mutableState.update { it.copy(loading=false) } }
         }
     }
@@ -182,7 +182,7 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
                 store.save(id,snapshot.layout,snapshot.revision)
                 if (state.value.project?.id==id) mutableState.update { it.copy(savedRevision=maxOf(it.savedRevision,snapshot.revision)) }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (state.value.project?.id==id) mutableState.update { it.copy(error=failure.message ?: "布局尚未保存，请重试") } }
+            catch (failure: Exception) { if (state.value.project?.id==id) mutableState.update { it.copy(error=failure.message ?: "The layout was not saved. Try again.") } }
         }
     }
     override fun onCleared() { engine?.close();super.onCleared() }

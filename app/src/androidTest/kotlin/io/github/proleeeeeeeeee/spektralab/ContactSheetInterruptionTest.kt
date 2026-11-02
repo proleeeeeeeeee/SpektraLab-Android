@@ -75,10 +75,10 @@ class ContactSheetInterruptionTest {
             compose.onNodeWithTag("workspace-view-table").performClick()
             compose.waitUntil(120_000) { light.state.value.layoutReady && !light.state.value.loading && light.state.value.images.size==2 }
             start();compose.onNodeWithTag("sheet-cancel").performClick();assertCancelled(ids)
-            compose.onNodeWithTag("sheet-error-message").assertTextContains("取消", substring = true).assertIsDisplayed();capture("explicit-cancel-correct-message");retry("explicit-cancel-retry")
+            compose.onNodeWithTag("sheet-error-message").assertTextContains("Cancel", substring = true).assertIsDisplayed();capture("explicit-cancel-correct-message");retry("explicit-cancel-retry")
             start();compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED);assertCancelled(ids)
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED);compose.activityRule.scenario.recreate()
-            compose.onNodeWithTag("sheet-error-message").assertTextContains("取消", substring = true).assertIsDisplayed();capture("background-cancel-correct-message");retry("background-cancel-retry")
+            compose.onNodeWithTag("sheet-error-message").assertTextContains("Cancel", substring = true).assertIsDisplayed();capture("background-cancel-correct-message");retry("background-cancel-retry")
             for (photo in photos) assertEquals(originals[photo.id],hash(store.source(photo)))
             assertNull(journal.load());assertTrue(journal.loadUris().isEmpty())
             File(evidence,"report.json").writeText(org.json.JSONObject().put("realPhotos",2).put("explicitCancelMessage",true).put("backgroundCancelMessage",true).put("activityRestore",true).put("successfulRetries",2).put("originalsUnchanged",true).put("stagingEmpty",true).toString(2))

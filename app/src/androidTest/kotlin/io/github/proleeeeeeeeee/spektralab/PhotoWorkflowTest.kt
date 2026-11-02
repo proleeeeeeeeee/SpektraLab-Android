@@ -85,19 +85,19 @@ class PhotoWorkflowTest {
             }
             assertNull(model.state.value.error)
             compose.onNodeWithTag("editor-tool-adjust", useUnmergedTree = true).performClick()
-            compose.onNodeWithContentDescription("曝光调整", useUnmergedTree = true)
+            compose.onNodeWithContentDescription("Exposure adjustment", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(0.75f) }
             compose.runOnIdle { model.finishInteraction() }
             assertEquals(.75,model.state.value.recipe.adjustments.exposure,.01)
             compose.onNodeWithTag("editor-undo", useUnmergedTree = true).performClick()
             assertEquals(0.0,model.state.value.recipe.adjustments.exposure,.01)
             compose.onNodeWithTag("editor-tool-compose", useUnmergedTree = true).performClick()
-            compose.onNodeWithText("旋转 90°", useUnmergedTree = true).performClick()
+            compose.onNodeWithText("Rotate 90°", useUnmergedTree = true).performClick()
             assertEquals(1,model.state.value.recipe.composition.quarterTurns)
-            compose.onNodeWithText("自由裁切", useUnmergedTree = true).performClick()
-            compose.onNodeWithContentDescription("裁切宽度", useUnmergedTree = true)
+            compose.onNodeWithText("Free crop", useUnmergedTree = true).performClick()
+            compose.onNodeWithContentDescription("Crop width", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(.7f) }
-            compose.onNodeWithText("应用裁切", useUnmergedTree = true).performClick()
+            compose.onNodeWithText("Apply crop", useUnmergedTree = true).performClick()
             assertEquals(.7,model.state.value.recipe.composition.crop.width,.01)
             compose.onNodeWithTag("editor-tool-paper", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("material-choice-kodak_2383", useUnmergedTree = true).performScrollTo().performClick()
@@ -118,7 +118,7 @@ class PhotoWorkflowTest {
             assertNotNull(result)
             assertTrue(result.width > 0 && result.height > 0)
             assertTrue(result.width.toDouble() / result.height in .85..1.15)
-            compose.onNodeWithText("照片已保存").assertIsDisplayed()
+            compose.onNodeWithText("Photo saved").assertIsDisplayed()
             val permissions = context.packageManager.getPackageInfo(context.packageName,
                 android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
             assertFalse(permissions.contains("android.permission.INTERNET"))

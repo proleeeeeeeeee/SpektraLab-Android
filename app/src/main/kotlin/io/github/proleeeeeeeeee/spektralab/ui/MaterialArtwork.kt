@@ -72,10 +72,10 @@ internal fun FilmCover(id: String,modifier: Modifier=Modifier,resource: Int?=fil
     }
     val current=image.takeIf { it.id==id && it.resource==resource }
     val bitmap=current?.bitmap
-    if (bitmap!=null) Image(bitmap.asImageBitmap(),"${stock?.let { it.brand+" "+it.name } ?: "胶片"} 包装",modifier.testTag("film-cover-$id"),contentScale=ContentScale.Fit)
+    if (bitmap!=null) Image(bitmap.asImageBitmap(),"${stock?.let { it.brand+" "+it.name } ?: "Film"} package",modifier.testTag("film-cover-$id"),contentScale=ContentScale.Fit)
     else Box(modifier,contentAlignment=Alignment.Center) {
-        Text(if (current?.loaded==true) "封面不可用" else "正在载入封面",fontSize=10.sp,color=MutedColor,
-            modifier=Modifier.testTag("film-cover-status-$id").semantics { contentDescription="${stock?.name ?: id}，封面${if (current?.loaded==true) "不可用" else "载入中"}" })
+        Text(if (current?.loaded==true) "Cover unavailable" else "Loading cover",fontSize=10.sp,color=MutedColor,
+            modifier=Modifier.testTag("film-cover-status-$id").semantics { contentDescription="${stock?.name ?: id}, cover ${if (current?.loaded==true) "unavailable" else "loading"}" })
     }
 }
 
@@ -106,8 +106,8 @@ internal fun rememberPaperSamples(state: EditorState): PaperSamplePresentation {
 internal fun PaperSample(id: String,image: Bitmap?,loading: Boolean,modifier: Modifier=Modifier,hasPhoto: Boolean=true,large: Boolean=false) {
     Box(modifier,contentAlignment=Alignment.Center) {
         if (image!=null && hasPhoto) Box(Modifier.width(if (large) 72.dp else 46.dp).height(if (large) 88.dp else 58.dp).background(PaperWhite).padding(3.dp)) {
-            Image(image.asImageBitmap(),"${Materials.papers.firstOrNull { it.id==id }?.name ?: "相纸"} 当前照片小样",Modifier.fillMaxSize().testTag("paper-sample-$id"),contentScale=ContentScale.Crop)
-        } else Text(if (!hasPhoto) "选择照片看效果" else if (loading) "正在生成小样" else "小样暂不可用",fontSize=10.sp,color=MutedColor,
+            Image(image.asImageBitmap(),"${Materials.papers.firstOrNull { it.id==id }?.name ?: "paper"} sample using current photo",Modifier.fillMaxSize().testTag("paper-sample-$id"),contentScale=ContentScale.Crop)
+        } else Text(if (!hasPhoto) "Select a photo to preview the effect" else if (loading) "Generating sample" else "Sample unavailable",fontSize=10.sp,color=MutedColor,
             modifier=Modifier.testTag(if (!hasPhoto) "paper-sample-empty-$id" else "paper-sample-status-$id"))
     }
 }
@@ -119,10 +119,10 @@ private fun FilmProfileCard(stock: FilmStock,modifier: Modifier) {
     // Main choice captions retain the full scalable identity; this compact illustration prioritizes its name.
     Column(modifier.padding(horizontal=10.dp,vertical=3.dp).border(1.dp,AccentColor.copy(alpha=.35f),RoundedCornerShape(4.dp))
         .padding(horizontal=7.dp,vertical=if (scale>1.8f) 1.dp else 4.dp).testTag("film-card-${stock.id}")
-        .semantics { contentDescription="${stock.brand} ${stock.name}，${if (stock.monochrome) "黑白负片" else "彩色负片"}材料文字卡" },
+        .semantics { contentDescription="${stock.brand} ${stock.name}, ${if (stock.monochrome) "B&W negative" else "Color negative"} material text card" },
         horizontalAlignment=Alignment.Start,verticalArrangement=Arrangement.SpaceBetween) {
         if (scale<=1.3f) Text(stock.brand,fontSize=9.sp,lineHeight=11.sp,color=MutedColor,maxLines=1)
         Text(stock.name,fontSize=12.sp,fontWeight=FontWeight.Medium,color=PaperWhite,maxLines=2,overflow=TextOverflow.Ellipsis,lineHeight=13.sp)
-        if (scale<=1.1f) Text(if (stock.monochrome) "黑白负片" else "彩色负片",fontSize=7.sp,lineHeight=9.sp,color=AccentColor,maxLines=1,modifier=Modifier.testTag("film-card-kind-${stock.id}"))
+        if (scale<=1.1f) Text(if (stock.monochrome) "B&W negative" else "Color negative",fontSize=7.sp,lineHeight=9.sp,color=AccentColor,maxLines=1,modifier=Modifier.testTag("film-card-kind-${stock.id}"))
     }
 }

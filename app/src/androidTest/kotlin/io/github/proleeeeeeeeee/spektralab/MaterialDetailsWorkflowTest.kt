@@ -121,14 +121,14 @@ class MaterialDetailsWorkflowTest {
             compose.onNodeWithTag("comparison-apply").performScrollTo().performClick()
             compose.waitUntil(120_000) { model.state.value.recipe.paperId=="kodak_2393" && !model.state.value.rendering }
             compose.onNodeWithTag("material-details").performScrollTo().performClick()
-            compose.onNodeWithTag("material-details-kind").performScrollTo().assertIsDisplayed().assertTextEquals("电影正片");capture("cinema-identity")
+            compose.onNodeWithTag("material-details-kind").performScrollTo().assertIsDisplayed().assertTextEquals("Cinema print film");capture("cinema-identity")
             compose.onNodeWithTag("comparison-close").performScrollTo().performClick()
             compose.runOnIdle { model.selectFilm("ilford_hp5_plus_400");model.selectTab(MaterialTab.PAPER) }
             compose.waitUntil(120_000) { !model.state.value.rendering }
             compose.onNodeWithTag("material-details").performScrollTo().performClick()
             compose.onNodeWithTag("material-single-compatible").performScrollTo().assertIsDisplayed()
             compose.onAllNodesWithTag("comparison-current").assertCountEquals(0)
-            compose.onNodeWithTag("material-details-kind").performScrollTo().assertIsDisplayed().assertTextEquals("黑白相纸");capture("monochrome-compatible")
+            compose.onNodeWithTag("material-details-kind").performScrollTo().assertIsDisplayed().assertTextEquals("B&W paper");capture("monochrome-compatible")
             compose.onNodeWithTag("comparison-close").performScrollTo().performClick()
             File(context.filesDir,"stage1-evidence/material-details-report.json").writeText(org.json.JSONObject().put("realPhoto",true).put("pixelMatches",matches).put("sourceFailureRetry",true).put("filmAndPrintApply",true).put("lifecycleRestore",true).put("monochromeSingleCompatible",true).toString(2))
         } catch (failure: Throwable) { runCatching { capture("test-failure") };throw failure }

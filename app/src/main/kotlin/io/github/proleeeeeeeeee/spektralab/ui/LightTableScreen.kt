@@ -47,6 +47,7 @@ internal fun LightTableScreen(project: PhotoProject, model: LightTableViewModel,
     onContactSheet: (PhotoProject, LightTableLayout) -> Unit = { _, _ -> },
     embedded: Boolean = false, controlsInHost: Boolean = false) {
     val state by model.state.collectAsStateWithLifecycle()
+    val fontScale = LocalDensity.current.fontScale
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val latestSuspended by rememberUpdatedState(suspended)
     var controls by remember { mutableStateOf(false) }
@@ -67,44 +68,52 @@ internal fun LightTableScreen(project: PhotoProject, model: LightTableViewModel,
                 modifier = Modifier.fillMaxSize())
             if (project.photos.isEmpty()) Column(Modifier.align(Alignment.Center).padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("灯箱里还没有照片", style = MaterialTheme.typography.titleMedium,
+                Text("No photos on the light table", style = MaterialTheme.typography.titleMedium,
                     color = if (state.layout.lightOn) CanvasColor else PaperWhite)
-                Text("导入普通照片，开始选片与排列。", Modifier.padding(vertical = 10.dp),
+                Text("Import regular photos to start selecting and arranging them.", Modifier.padding(vertical = 10.dp),
                     color = if (state.layout.lightOn) PanelColor else MutedColor)
                 Button(onClick = onImport, enabled = !importing && canImport,
-                    modifier = Modifier.heightIn(min = 48.dp)) { Text(if (importing) "正在导入…" else "导入照片") }
+                    modifier = Modifier.heightIn(min = 48.dp)) { Text(if (importing) "Importing…" else "Import photos") }
             }
             if (project.photos.isNotEmpty() && state.layoutReady && state.filteredPhotos.isEmpty()) Column(
                 Modifier.align(Alignment.Center).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("没有符合筛选的照片", color = if (state.layout.lightOn) CanvasColor else PaperWhite)
+                Text("No photos match the current filter", color = if (state.layout.lightOn) CanvasColor else PaperWhite)
                 Button(onClick = { model.filter(ReviewFilter()) },
                     colors = ButtonDefaults.buttonColors(containerColor = PanelColor, contentColor = PaperWhite),
-                    modifier = Modifier.heightIn(min = 48.dp)) { Text("清除筛选") }
+                    modifier = Modifier.heightIn(min = 48.dp)) { Text("Clear filter") }
             }
         }
     }
     if (embedded) {
         Column(Modifier.fillMaxSize()) {
-            if (!controlsInHost) LightTablePageControls(state, model)
-            viewport(Modifier.weight(1f).fillMaxWidth())
-            if (!controlsInHost) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly) {
-                FilterChip(state.layout.lightOn, { model.setLight(!state.layout.lightOn) },
-                    enabled = state.layoutReady, label = { Text("背光") },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("table-light").semantics { contentDescription = "灯箱背光" })
-                FilterChip(state.layout.loupeEnabled, model::toggleLoupe, enabled = state.layoutReady,
-                    label = { Text("放大镜") }, modifier = Modifier.heightIn(min = 48.dp).testTag("table-loupe"))
-                TextButton(onClick = model::rotate, enabled = state.layoutReady && state.layout.selectedId != null,
-                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "旋转当前胶片" }) { Text("旋转") }
-                TextButton(onClick = { controls = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("table-controls")) { Text("更多") }
+            if (!controlsInHost && fontScale >= 1.5f) Box(Modifier.weight(1f).fillMaxWidth()) {
+                viewport(Modifier.fillMaxSize())
+                FilledTonalButton(onClick = { controls = true },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).heightIn(min = 48.dp).testTag("table-controls")) {
+                    Text("Controls")
+                }
+            } else {
+                if (!controlsInHost) LightTablePageControls(state, model)
+                viewport(Modifier.weight(1f).fillMaxWidth())
+                if (!controlsInHost) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly) {
+                    FilterChip(state.layout.lightOn, { model.setLight(!state.layout.lightOn) },
+                        enabled = state.layoutReady, label = { Text("Backlight") },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("table-light").semantics { contentDescription = "Light-table backlight" })
+                    FilterChip(state.layout.loupeEnabled, model::toggleLoupe, enabled = state.layoutReady,
+                        label = { Text("Loupe") }, modifier = Modifier.heightIn(min = 48.dp).testTag("table-loupe"))
+                    TextButton(onClick = model::rotate, enabled = state.layoutReady && state.layout.selectedId != null,
+                        modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Rotate current film" }) { Text("Rotate") }
+                    TextButton(onClick = { controls = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("table-controls")) { Text("More") }
+                }
             }
         }
     } else BoxWithConstraints(Modifier.fillMaxSize()) {
         val header: @Composable () -> Unit = {
             Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .semantics { contentDescription = "返回照片" }) { Text("‹", fontSize = 28.sp) }
-                Text("灯箱", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                    .semantics { contentDescription = "Back to photos" }) { Text("‹", fontSize = 28.sp) }
+                Text("Light table", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 Text(project.name, Modifier.padding(end = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = MutedColor, style = MaterialTheme.typography.bodySmall)
             }
@@ -124,12 +133,12 @@ internal fun LightTableScreen(project: PhotoProject, model: LightTableViewModel,
     if (controls) ModalBottomSheet(onDismissRequest = { controls = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().heightIn(max = 680.dp).navigationBarsPadding()) {
-            Text("灯箱设置", Modifier.padding(horizontal = 20.dp, vertical = 12.dp), style = MaterialTheme.typography.titleLarge)
+            Text("Light-table settings", Modifier.padding(horizontal = 20.dp, vertical = 12.dp), style = MaterialTheme.typography.titleLarge)
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
                 LightTableControlPanel(state, model)
             }
             Button(onClick = { controls = false }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)
-                .heightIn(min = 48.dp).testTag("table-controls-done")) { Text("完成") }
+                .heightIn(min = 48.dp).testTag("table-controls-done")) { Text("Done") }
         }
     }
 }
@@ -139,13 +148,13 @@ private fun LightTablePageControls(state: LightTableState, model: LightTableView
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { model.page(-1) }, enabled = state.layoutReady && state.layout.page > 0,
             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("table-previous")
-                .semantics { contentDescription = "灯箱上一页" }) { Text("‹") }
-        Text("第 ${state.layout.page + 1} / ${maxOf(1, (state.filteredPhotos.size + LIGHT_TABLE_PAGE_SIZE - 1) / LIGHT_TABLE_PAGE_SIZE)} 页",
+                .semantics { contentDescription = "Previous light-table page" }) { Text("‹") }
+        Text("Page ${state.layout.page + 1} of ${maxOf(1, (state.filteredPhotos.size + LIGHT_TABLE_PAGE_SIZE - 1) / LIGHT_TABLE_PAGE_SIZE)}",
             Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MutedColor)
         if (state.loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         TextButton(onClick = { model.page(1) }, enabled = state.layoutReady && (state.layout.page + 1) * LIGHT_TABLE_PAGE_SIZE < state.filteredPhotos.size,
             modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("table-next")
-                .semantics { contentDescription = "灯箱下一页" }) { Text("›") }
+                .semantics { contentDescription = "Next light-table page" }) { Text("›") }
     }
 }
 
@@ -153,34 +162,34 @@ private fun LightTablePageControls(state: LightTableState, model: LightTableView
 internal fun LightTableControlPanel(state: LightTableState, model: LightTableViewModel) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("灯箱背光", Modifier.weight(1f))
+            Text("Light-table backlight", Modifier.weight(1f))
             Switch(state.layout.lightOn, model::setLight, enabled = state.layoutReady,
-                modifier = Modifier.testTag("table-light-switch").semantics { contentDescription = "灯箱背光" })
+                modifier = Modifier.testTag("table-light-switch").semantics { contentDescription = "Light-table backlight" })
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("亮度", style = MaterialTheme.typography.bodySmall)
+            Text("Brightness", style = MaterialTheme.typography.bodySmall)
             Slider(state.layout.brightness.toFloat(), { model.brightness(it.toDouble()) },
-                Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = "灯箱背光亮度" },
+                Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = "Light-table backlight brightness" },
                 valueRange = .05f..1f, onValueChangeFinished = model::commit, enabled = state.layoutReady && state.layout.lightOn)
             Text("${(state.layout.brightness * 100).roundToInt()}%", style = MaterialTheme.typography.bodySmall)
         }
         LightTablePageControls(state, model)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(state.layout.loupeEnabled, model::toggleLoupe, enabled = state.layoutReady,
-                label = { Text("放大镜") }, modifier = Modifier.heightIn(min = 48.dp).testTag("table-loupe"))
+                label = { Text("Loupe") }, modifier = Modifier.heightIn(min = 48.dp).testTag("table-loupe"))
             TextButton(onClick = model::zoom, enabled = state.layout.loupeEnabled && state.layoutReady,
                 modifier = Modifier.heightIn(min = 48.dp)) { Text("${state.layout.zoom.roundToInt()}×") }
             TextButton(onClick = model::rotate, enabled = state.layout.selectedId != null && state.layoutReady,
-                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "旋转当前胶片" }) { Text("旋转") }
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Rotate current film" }) { Text("Rotate") }
             TextButton(onClick = model::arrange, enabled = state.layoutReady && state.project?.photos?.isNotEmpty() == true,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("table-arrange")) { Text("重新排列") }
+                modifier = Modifier.heightIn(min = 48.dp).testTag("table-arrange")) { Text("Rearrange") }
         }
         if (state.failed.isNotEmpty() || state.error != null) {
-            Text(state.error?.take(160) ?: "${state.failed.size} 张预览暂不可用", style = MaterialTheme.typography.bodySmall,
+            Text(state.error?.take(160) ?: "${state.failed.size} previews unavailable", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = model::retry, modifier = Modifier.heightIn(min = 48.dp)) { Text("重试预览") }
+            TextButton(onClick = model::retry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry previews") }
         }
-        Text("拖动胶片或镜片；双击照片进入编辑。背光只改变灯箱显示。", Modifier.padding(vertical = 8.dp),
+        Text("Drag film frames or the loupe. Double-tap a photo to edit it. The backlight only changes the light-table display.", Modifier.padding(vertical = 8.dp),
             style = MaterialTheme.typography.bodySmall, color = MutedColor)
     }
 }
@@ -219,8 +228,8 @@ internal fun LightTableBoard(state: LightTableState,onSelect: (String)->Unit,
     LaunchedEffect(target,state.images[target],state.layout.loupeEnabled,state.layout.lightOn) { onDetail(target) }
     Canvas(modifier.testTag("light-table-board").onSizeChanged { viewport=it }
         .semantics {
-            contentDescription="灯箱画布，${state.pagePhotos.size} 张照片"
-            customActions=state.pagePhotos.map { photo -> CustomAccessibilityAction("编辑 ${photo.displayName}") { onEdit(photo.id);true } }
+            contentDescription="Light-table canvas, ${state.pagePhotos.size} photos"
+            customActions=state.pagePhotos.map { photo -> CustomAccessibilityAction("Edit ${photo.displayName}") { onEdit(photo.id);true } }
         }
         .pointerInput(state.project?.id) {
             detectTapGestures(onTap={ p -> hitFilm(latest,p,latestViewport.width.toDouble(),latestViewport.height.toDouble())?.let { onSelect(it.photoId);onCommit() } },
@@ -301,7 +310,7 @@ private fun DrawScope.drawLightTableScene(state: LightTableState,bitmapPaint: Pa
                 drawIntoCanvas { it.nativeCanvas.drawBitmap(image,null,rect,bitmapPaint) }
             } else {
                 textPaint.color=android.graphics.Color.LTGRAY;textPaint.textSize=(w*.075f).coerceAtLeast(10f)
-                drawIntoCanvas { it.nativeCanvas.drawText(if (photo.id in state.failed) "暂不可用" else "生成中…",-w*.39f,0f,textPaint) }
+                drawIntoCanvas { it.nativeCanvas.drawText(if (photo.id in state.failed) "Unavailable" else "Generating…",-w*.39f,0f,textPaint) }
             }
             textPaint.color=if (lamp) android.graphics.Color.rgb(194,155,82) else android.graphics.Color.rgb(80,71,53)
             textPaint.textSize=w*.055f

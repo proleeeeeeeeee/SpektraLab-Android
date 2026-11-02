@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.proleeeeeeeeee.spektralab"
         minSdk = 30
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.6.0-dev.1"
+        versionCode = 9
+        versionName = "0.6.0-dev.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += providers.gradleProperty("androidAbi").orElse("arm64-v8a").get().split(",") }
     }

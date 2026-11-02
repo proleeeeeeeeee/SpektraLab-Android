@@ -111,7 +111,7 @@ class NegativeScanQueueRecoveryTest {
             val completedHash = sha(context.contentResolver.openInputStream(Uri.parse(completedUri))!!.use { it.readBytes() })
             val firstRows = outputs(prefix)
             assertEquals(1, firstRows.size); assertTrue(firstRows.all { it.pending == 0 })
-            compose.onNodeWithText("重试失败项").performScrollTo()
+            compose.onNodeWithText("Retry failed jobs").performScrollTo()
             screenshot(evidence, "01-one-failed-one-complete")
 
             // A stable lifecycle boundary: the failed job waits for explicit retry, so no
@@ -128,7 +128,7 @@ class NegativeScanQueueRecoveryTest {
             assertEquals(originalHashes[0], sha(damagedFile!!.readBytes()))
             // Deliberately change the current roll. Retry must retain its original snapshot.
             compose.runOnIdle { model.settings(snapshot.copy(exposure = -.75, temperature = -.3, tint = .3)); model.commit() }
-            compose.onNodeWithText("重试失败项").performScrollTo().performClick()
+            compose.onNodeWithText("Retry failed jobs").performScrollTo().performClick()
             compose.waitUntil(30_000) { !model.state.value.exporting && model.state.value.roll.jobs.size == 2 && model.state.value.roll.jobs.all { it.status == NegativeJobStatus.COMPLETE } }
             val finalJobs = model.state.value.roll.jobs
             assertEquals(firstJobs.map { it.id }, finalJobs.map { it.id })
@@ -152,7 +152,7 @@ class NegativeScanQueueRecoveryTest {
                         .put("snapshot", Json.encodeToString(job.settings)).put("sourceSha256", originalHashes[index]))
                 } finally { decoded.recycle() }
             }
-            compose.onNodeWithText("导出队列：2 已保存，0 待处理，0 失败").performScrollTo()
+            compose.onNodeWithText("Export queue: 2 saved, 0 pending, 0 failed").performScrollTo()
             screenshot(evidence, "02-retried-without-duplicate")
             report.put("status", "PASS").put("initialCompletedOutputs", firstRows.size).put("finalCompletedOutputs", finalRows.size)
                 .put("pendingRows", finalRows.count { it.pending != 0 }).put("checks", checks)

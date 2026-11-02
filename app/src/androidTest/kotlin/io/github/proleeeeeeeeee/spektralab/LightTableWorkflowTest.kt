@@ -44,7 +44,7 @@ class LightTableWorkflowTest {
         compose.runOnIdle { model.createProject(name);model.showLibrary() }
         compose.waitUntil(120_000) { model.state.value.library.active.name==name }
         compose.onNodeWithTag("workspace-view-table").performClick()
-        compose.onNodeWithText("灯箱里还没有照片").assertIsDisplayed()
+        compose.onNodeWithText("No photos on the light table").assertIsDisplayed()
         compose.onNodeWithTag("workspace-import").assertIsEnabled()
         screenshot("empty")
         compose.onNodeWithTag("workspace-view-grid").performClick()
@@ -106,20 +106,20 @@ class LightTableWorkflowTest {
             val dragged=light.state.value.layout.placements.first { it.photoId==id }
             assertTrue("Film drag must update its normalized position",dragged.x>before.x+.03)
             assertEquals(id,light.state.value.layout.placements.last().photoId)
-            compose.onNodeWithContentDescription("旋转当前胶片").performClick()
+            compose.onNodeWithContentDescription("Rotate current film").performClick()
             assertEquals(dragged.rotated(15.0).rotation,light.state.value.layout.placements.first { it.photoId==id }.rotation,0.0)
             val controls = compose.onNodeWithTag("table-controls")
             fun openControls() { controls.performClick() }
             fun closeControls() { compose.onNodeWithTag("table-controls-done").performClick() }
             openControls()
-            compose.onNodeWithContentDescription("灯箱背光亮度").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.31f) }
+            compose.onNodeWithContentDescription("Light-table backlight brightness").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.31f) }
             assertEquals(.31,light.state.value.layout.brightness,.005)
             compose.onNodeWithTag("table-light-switch").performScrollTo().assertIsOn().performClick()
             assertFalse(light.state.value.layout.lightOn)
             closeControls(); screenshot("lamp-off")
             compose.onNodeWithTag("table-light").performClick()
             openControls()
-            compose.onNodeWithContentDescription("灯箱背光亮度").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.9f) }
+            compose.onNodeWithContentDescription("Light-table backlight brightness").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.9f) }
             closeControls()
             val posesBeforeLens=light.state.value.layout.placements
             val lensBefore=light.state.value.layout
@@ -159,7 +159,7 @@ class LightTableWorkflowTest {
             compose.waitUntil(120_000) { !light.state.value.loading && light.state.value.failed.isNotEmpty() }
             assertTrue(light.state.value.images.isEmpty())
             privateFile!!.writeBytes(backup!!)
-            openControls(); compose.onNodeWithText("重试预览").performScrollTo().performClick(); waitPage(1); closeControls()
+            openControls(); compose.onNodeWithText("Retry previews").performScrollTo().performClick(); waitPage(1); closeControls()
             privateFile=null;backup=null
             compose.onNodeWithTag("table-previous").performClick();waitPage(8)
             if (light.state.value.layout.loupeEnabled) compose.onNodeWithTag("table-loupe").performClick()

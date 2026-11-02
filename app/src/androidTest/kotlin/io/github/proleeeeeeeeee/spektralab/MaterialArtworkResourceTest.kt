@@ -39,7 +39,7 @@ class MaterialArtworkResourceTest {
         compose.setContent { SpektraTheme { FilmCover(id,Modifier.size(108.dp,64.dp),if (missing) 0 else filmCoverResource(id)) } }
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("film-cover-$id").fetchSemanticsNodes().isNotEmpty() }
         compose.runOnIdle { missing=true }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("封面不可用").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Cover unavailable").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("film-cover-$id").assertDoesNotExist()
         compose.runOnIdle { id="cinestill_800t";missing=false }
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("film-cover-$id").fetchSemanticsNodes().isNotEmpty() }
@@ -50,7 +50,7 @@ class MaterialArtworkResourceTest {
             compose.runOnIdle { id=stock.id }
             compose.onNodeWithTag("film-card-${stock.id}").assertIsDisplayed()
             compose.onNodeWithText(stock.name).assertIsDisplayed()
-            compose.onNodeWithText("封面不可用").assertDoesNotExist()
+            compose.onNodeWithText("Cover unavailable").assertDoesNotExist()
         }
     }
 }

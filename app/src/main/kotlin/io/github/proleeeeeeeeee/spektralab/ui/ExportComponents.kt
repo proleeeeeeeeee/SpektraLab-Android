@@ -43,7 +43,7 @@ internal fun ExportSheetFrame(
                 Text(title, Modifier.weight(1f).testTag("export-title"), style = MaterialTheme.typography.titleLarge,
                     color = PaperWhite)
                 TextButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("export-close")) {
-                    Text("关闭")
+                    Text("Close")
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .55f))

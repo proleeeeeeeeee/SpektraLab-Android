@@ -66,29 +66,29 @@ internal fun ProjectActions(state: EditorState, model: EditorViewModel, modifier
             state.library.projects.forEach { project -> DropdownMenuItem(text = { Text(project.name) },
                 onClick = { menu = false; model.selectProject(project.id) }) }
             HorizontalDivider()
-            onImport?.let { action -> DropdownMenuItem(text = { Text("导入照片") }, enabled = state.ready, onClick = { menu = false; action() }) }
-            onFiles?.let { action -> DropdownMenuItem(text = { Text("RAW／文件") }, enabled = state.ready, onClick = { menu = false; action() }) }
+            onImport?.let { action -> DropdownMenuItem(text = { Text("Import photos") }, enabled = state.ready, onClick = { menu = false; action() }) }
+            onFiles?.let { action -> DropdownMenuItem(text = { Text("RAW / files") }, enabled = state.ready, onClick = { menu = false; action() }) }
             if (onImport != null || onFiles != null) HorizontalDivider()
-            DropdownMenuItem(text = { Text("新建项目") }, onClick = { menu = false; newProject = true },
+            DropdownMenuItem(text = { Text("New project") }, onClick = { menu = false; newProject = true },
                 modifier = Modifier.testTag("project-new"))
-            DropdownMenuItem(text = { Text("重命名项目") }, onClick = { menu = false; renameId = state.library.active.id; rename = true })
-            DropdownMenuItem(text = { Text("删除项目") }, onClick = { menu = false; deleteId = state.library.active.id })
+            DropdownMenuItem(text = { Text("Rename project") }, onClick = { menu = false; renameId = state.library.active.id; rename = true })
+            DropdownMenuItem(text = { Text("Delete project") }, onClick = { menu = false; deleteId = state.library.active.id })
         }
     }
-    if (newProject) NameDialog("新建项目", onClose = { newProject = false }) {
+    if (newProject) NameDialog("New project", onClose = { newProject = false }) {
         model.createProject(it); newProject = false
     }
-    if (rename) NameDialog("重命名项目", initial = state.library.active.name, onClose = { rename = false }) {
+    if (rename) NameDialog("Rename project", initial = state.library.active.name, onClose = { rename = false }) {
         if (state.library.active.id == renameId) model.renameProject(it)
         rename = false
     }
     deleteId?.let { id -> AlertDialog(onDismissRequest = { deleteId = null },
-        title = { Text("删除项目？") },
-        text = { Text(if (id == state.library.active.id) "移除本应用内的副本和编辑；相册原片及已导出文件会保留。"
-            else "项目已切换，请返回后重新选择。") },
+        title = { Text("Delete project?") },
+        text = { Text(if (id == state.library.active.id) "Removes the app's copies and edits. Originals in your gallery and exported files remain."
+            else "The project changed. Go back and select it again.") },
         confirmButton = { TextButton(onClick = { if (id == state.library.active.id) model.deleteProject(); deleteId = null },
-            enabled = id == state.library.active.id) { Text("删除项目") } },
-        dismissButton = { TextButton(onClick = { deleteId = null }) { Text("取消") } }) }
+            enabled = id == state.library.active.id) { Text("Delete project") } },
+        dismissButton = { TextButton(onClick = { deleteId = null }) { Text("Cancel") } }) }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -137,23 +137,23 @@ private fun WorkspacePhotoTile(photo: StoredPhoto, number: Int, selected: Boolea
                     .background(CanvasColor.copy(alpha = .78f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 3.dp))
             if (selectionMode) Checkbox(selected, { onSelect() },
                 Modifier.align(Alignment.TopEnd).testTag("photo-select-${photo.id}")
-                    .semantics { contentDescription = "多选 ${photo.displayName}" })
+                    .semantics { contentDescription = "Select ${photo.displayName}" })
             if (review.color != ReviewColor.NONE) Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
                 .size(10.dp).background(review.color.swatch(), RoundedCornerShape(5.dp)))
         }
         Text(photo.displayName, Modifier.padding(top = 7.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (selected) AccentColor else PaperWhite, style = MaterialTheme.typography.bodySmall)
-        Text((if (review.rating > 0) "${review.rating}★" else "未评级") +
+        Text((if (review.rating > 0) "${review.rating}★" else "Unrated") +
             if (review.flag == ReviewFlag.NONE) "" else "  ${reviewFlagName(review.flag)}",
             color = MutedColor, style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.testTag("photo-review-${photo.id}"))
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onMark, enabled = metadataReady,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("photo-mark-${photo.id}"), contentPadding = PaddingValues(horizontal = 6.dp)) { Text("标记") }
+                modifier = Modifier.heightIn(min = 48.dp).testTag("photo-mark-${photo.id}"), contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Mark") }
             TextButton(onClick = onPick, enabled = metadataReady,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("photo-picked-${photo.id}")
-                    .semantics { contentDescription = if (picked) "取消入选 ${photo.displayName}" else "入选 ${photo.displayName}" },
-                contentPadding = PaddingValues(horizontal = 6.dp)) { Text(if (picked) "已入选" else "入选", color = if (picked) AccentColor else MutedColor) }
+                    .semantics { contentDescription = if (picked) "Remove ${photo.displayName} from picks" else "Pick ${photo.displayName}" },
+                contentPadding = PaddingValues(horizontal = 6.dp)) { Text(if (picked) "Picked" else "Selected", color = if (picked) AccentColor else MutedColor) }
         }
     }
 }
@@ -163,19 +163,19 @@ internal fun NameDialog(title: String, initial: String = "", onClose: () -> Unit
     var name by remember { mutableStateOf(initial) }
     AlertDialog(onDismissRequest = onClose, title = { Text(title) },
         text = { OutlinedTextField(value = name, onValueChange = { if (it.length <= 80) name = it },
-            label = { Text("名称") }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text("保存") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("取消") } })
+            label = { Text("Name") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } })
 }
 
 @Composable
 internal fun PresetDialog(state: EditorState, model: EditorViewModel, onClose: () -> Unit) {
-    AlertDialog(onDismissRequest = onClose, title = { Text("预设") },
+    AlertDialog(onDismissRequest = onClose, title = { Text("Presets") },
         text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-            if (state.library.presets.isEmpty()) Text("在编辑器的更多菜单中保存一个预设。", color = MutedColor)
+            if (state.library.presets.isEmpty()) Text("Save a preset from the editor's More menu.", color = MutedColor)
             state.library.presets.forEach { preset -> Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { model.applyPreset(preset.id); onClose() }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(preset.name) }
-                TextButton(onClick = { model.deletePreset(preset.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("删除") }
+                TextButton(onClick = { model.deletePreset(preset.id) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Delete") }
             } }
-        } }, confirmButton = { TextButton(onClick = onClose) { Text("关闭") } })
+        } }, confirmButton = { TextButton(onClick = onClose) { Text("Close") } })
 }
