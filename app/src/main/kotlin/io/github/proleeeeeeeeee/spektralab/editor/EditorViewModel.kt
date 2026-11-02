@@ -326,6 +326,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun undo() { if (!state.value.exporting) { finishInteraction(); history.undo(); publishRecipe() } }
     fun redo() { if (!state.value.exporting) { finishInteraction(); history.redo(); publishRecipe() } }
+    fun prepareLightTable() {
+        if (state.value.exporting || state.value.importing) return
+        finishInteraction();stopPreview()
+        mutableState.update { it.copy(showEditor=false) }
+    }
     fun showLibrary() { if (!state.value.exporting) mutableState.update { it.copy(showEditor = false) } }
     fun showEditor() { mutableState.update { it.copy(showEditor = true) } }
     fun dismissError() { mutableState.update { it.copy(error = null) } }
@@ -371,7 +376,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val input = current.original ?: return
         if (!current.ready || current.exporting) return
         val versioned = photo.copy(recipe = current.recipe,revision = photo.revision+1)
-        mutableState.update { it.copy(photo = versioned) }
+        // Invalidate synchronously, before debounce/native work. A highlighted new
+        // recipe must never be paired with the previous recipe's rendered pixels.
+        mutableState.update { it.copy(photo = versioned, preview = null, rendering = true) }
         // Persist edits independently of preview debounce, navigation or export.
         viewModelScope.launch {
             try { store.save(versioned) }

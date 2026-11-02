@@ -28,7 +28,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ProjectLibrary(
     state: EditorState, model: EditorViewModel, onImport: () -> Unit, onFiles: () -> Unit,
-    onAbout: () -> Unit, onPresets: () -> Unit, onBatch: () -> Unit,
+    onAbout: () -> Unit, onPresets: () -> Unit, onBatch: () -> Unit, onLightTable: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     var nameAction by remember { mutableStateOf<String?>(null) }
@@ -95,6 +95,7 @@ internal fun ProjectLibrary(
         }
         Row(Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = onPresets) { Text("Presets") }
+            TextButton(onClick = onLightTable,enabled = !state.importing && !state.exporting) { Text("Light table") }
             TextButton(onClick = onBatch,enabled = state.library.active.photos.isNotEmpty()) { Text("Batch export") }
         }
     }

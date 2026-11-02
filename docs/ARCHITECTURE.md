@@ -26,6 +26,16 @@ Slider gestures preview draft recipes and commit one history entry on release. C
 
 Crop rectangles refer to the original source. Aspect presets fit inside that rectangle; an active film frame owns the physical gate ratio. Straightening shrinks the effective crop until every rotated corner lies inside the source. The engine then turns and flips the crop, before producing the physical scan. Geometry parameters are shared by preview and export.
 
+## Light Table
+
+Each project has a separate AtomicFile layout: normalized film positions, z-order, rotation, lamp brightness, page and loupe settings. Layout writes have a mutex/revision guard and never write the photo index or export queue. Controls wait for the initial disk load; background cancellation cannot replace a saved layout with defaults.
+
+The native Compose Canvas draws the project's actual edited photographs through FilmEngine.renderSource. At most eight 512-pixel board renders and one 1536-pixel loupe detail are retained. A serial engine, cancellation and generation checks reject stale page/project results. Leaving the screen or backgrounding drops these feature-owned bitmaps and closes its engine; returning reloads the current page.
+
+Drawing, film hit testing and loupe sampling share the same translation/rotation geometry. The lens clips and magnifies that transformed scene around its own board coordinate, substituting the higher-resolution render for the photo under its center. The board image remains a correctly sampled fallback while detail develops. Lens/handle drags take priority within its hit region; film drags elsewhere select and bring the film forward. Double-tap opens the existing editor and returns to the preserved table layout.
+
+The table's lamp affects its display only. Recipes, physical profiles, preview/export rendering and output pixels are not changed by lamp settings. A changed recipe clears the editor's old preview synchronously, before debounce; the original fallback is labelled so a new selection cannot masquerade as the prior render.
+
 ## Export
 
 Export snapshots the recipe and size, pauses preview and renders the private source at that exact requested size. Original uses the full decoded source. A conservative admission budget accounts for source, negative, staging, render arenas and readback; GPU limits can also reject a job. Nothing silently changes the chosen resolution. Full sessions are released after each job; there is no unsupported independent-tile approximation of spatial effects.

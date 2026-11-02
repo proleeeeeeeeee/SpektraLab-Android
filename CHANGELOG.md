@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-alpha.1
+
+- Add a native Light Table for each project, with real edited photographs, backlight on/off and brightness.
+- Drag film independently from the loupe, rotate selected film, and arrange up to eight photographs per page.
+- Sample the actual transformed photograph through a movable 2x-4x loupe, with a bounded higher-resolution detail render.
+- Restore project layouts, lamp and loupe settings across backgrounding and reopening; double-tap a photograph to edit and return to its arrangement.
+- Clear stale previews immediately when Film/Paper or another recipe setting changes; label the original while a preview develops or is unavailable.
+- Add geometry, persistence, real-pixel, material-selection and Android interaction regressions.
+
+The arm64 test APK retains the previous signing identity and increases version code to 4. S25 Ultra touch, display, driver, camera-file and performance checks remain pending; emulator validation is not hardware validation.
+
 ## 0.3.0-alpha.1
 
 - Add persistent named projects with multiple private originals and a thumbnail grid.

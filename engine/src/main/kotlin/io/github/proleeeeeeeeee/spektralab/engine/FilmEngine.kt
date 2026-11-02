@@ -39,11 +39,11 @@ class FilmEngine(context: Context) : AutoCloseable {
         NativeBridge.render(handle.get(), input, sourceKey, engineParameters(recipe, input.width, input.height),
             recipe.adjustments.scanTone())
     }
-    suspend fun renderSource(file: File,sourceKey: String,info: SourceInfo,recipe: EditRecipe): Bitmap = withContext(dispatcher) {
+    suspend fun renderSource(file: File,sourceKey: String,info: SourceInfo,recipe: EditRecipe,longEdge: Int = RenderPolicy.PREVIEW_LONG_EDGE): Bitmap = withContext(dispatcher) {
         check(!closed && handle.get() != 0L) { "Engine is not ready" }
         NativeBridge.renderFile(handle.get(),privateSource(application,file),sourceKey,
             engineParameters(recipe,info.width,info.height),recipe.adjustments.scanTone(),
-            RenderPolicy.PREVIEW_LONG_EDGE,memoryBudget(application),info.raw)
+            longEdge.also { require(it in 64..2560) },memoryBudget(application),info.raw)
     }
     suspend fun prepareExport(file: File,info: SourceInfo,recipe: EditRecipe,settings: ExportSettings): PreparedExport = withContext(dispatcher) {
         check(!closed && handle.get() != 0L) { "Engine is not ready" }

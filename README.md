@@ -20,12 +20,16 @@ The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer w
 - Free crop with draggable corners, aspect presets, 90° rotation, horizontal/vertical flips and ±15° straightening.
 - Drag to reframe, undo / redo, and hold to compare the original.
 - Named projects with a persistent multi-photo grid, selection and private edit recovery.
+- A project Light Table with backlight/brightness, draggable and rotatable film, a movable real-image loupe, eight-photo pages and saved arrangements.
+- Double-tap a photograph on the table to edit; Back restores the table and its layout.
 - Custom presets and copied settings; composition transfers only when requested.
 - Resumable serial batch export, per-photo error reporting and retry.
 - JPEG, PNG, true 16-bit RGB TIFF with an embedded sRGB profile, and calibrated Ultra HDR JPEG export.
 - 2560 px, 4096 px or Original resolution. Gallery originals are never overwritten.
 
-Preview inputs have a 1024 px long edge. Original export uses the complete decoded source before crop and film edge; smaller sizes explicitly downsample at import-to-engine time. A conservative memory check and the GPU driver may reject a large job. **Original never silently shrinks the source.** This is not a claim that a phone can process every 50 MP or 200 MP photograph at full size.
+Open **Light table** below a project's photograph grid. Drag a film strip to move it, tap **Rotate** for 15-degree turns, and drag the lens or its handle to inspect the image. **Arrange** restores the starting arrangement. Lamp brightness changes the table display; it does not alter an edit or an export.
+
+Editor preview inputs have a 1024 px long edge. Original export uses the complete decoded source before crop and film edge; smaller sizes explicitly downsample at import-to-engine time. A conservative memory check and the GPU driver may reject a large job. **Original never silently shrinks the source.** This is not a claim that a phone can process every 50 MP or 200 MP photograph at full size.
 
 RAW development uses bundled LibRaw 0.22.2, full sensor pixels and as-shot white balance, then feeds linear 16-bit ProPhoto RGB into the spectral engine. It does not use an embedded JPEG. Some compressed DNG/Expert RAW variants and proprietary encodings are unsupported; S25 Ultra camera files still need hardware testing. RAW is an input format: processed sensor RAW export is not offered.
 
@@ -47,7 +51,7 @@ Install the official Android SDK/NDK and a host glslangValidator before building
 
 | Module | Responsibility |
 | --- | --- |
-| core | Immutable recipes, presets, export snapshots, compatibility and crop geometry |
+| core | Immutable recipes, presets, export snapshots, compatibility, crop and light-table geometry |
 | engine | Serial Vulkan ownership, RAW/image decoding, float output, TIFF and HDR encoding |
 | app | Compose interface, atomic project storage, resumable queue and MediaStore publishing |
 | third_party/spektralab | Unmodified upstream source pinned as a Git submodule |

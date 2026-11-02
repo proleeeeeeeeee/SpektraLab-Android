@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.proleeeeeeeeee.spektralab.core.*
 import io.github.proleeeeeeeeee.spektralab.editor.*
@@ -47,6 +48,13 @@ import io.github.proleeeeeeeeee.spektralab.editor.*
 fun SpektraApp(viewModel: EditorViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val lightModel: LightTableViewModel = viewModel()
+    var lightTable by rememberSaveable { mutableStateOf(false) }
+    var returnToTable by rememberSaveable { mutableStateOf(false) }
+    fun backFromEditor() {
+        viewModel.showLibrary()
+        if (returnToTable) { lightTable=true;returnToTable=false }
+    }
     var exportOptions by rememberSaveable { mutableStateOf(false) }
     var about by rememberSaveable { mutableStateOf(false) }
     var presets by rememberSaveable { mutableStateOf(false) }
@@ -58,17 +66,25 @@ fun SpektraApp(viewModel: EditorViewModel) {
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
         viewModel.importPhotos(it)
     }
-    BackHandler(state.showEditor && !state.exporting) { viewModel.showLibrary() }
+    BackHandler(state.showEditor && !state.exporting && !lightTable) { backFromEditor() }
+    BackHandler(lightTable && !state.exporting) { lightTable=false;returnToTable=false;viewModel.showLibrary() }
     SpektraTheme {
         Surface(Modifier.fillMaxSize(), color = CanvasColor) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                if (state.showEditor && state.original != null) {
-                    Editor(state, viewModel, onExport = { exportOptions = true },onPresets = { presets = true })
+                if (lightTable) {
+                    LightTableScreen(state.library.active,lightModel,
+                        onBack={ lightTable=false;returnToTable=false;viewModel.showLibrary() },
+                        onEdit={ id -> lightTable=false;returnToTable=true;viewModel.openPhoto(id) },
+                        onImport={ multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },importing=state.importing,canImport=state.ready)
+                } else if (state.showEditor && state.original != null) {
+                    Editor(state, viewModel, onExport = { exportOptions = true },onPresets = { presets = true },
+                        onBack={ backFromEditor() },backLabel=if (returnToTable) "Back to light table" else "Back to photographs")
                 } else {
                     ProjectLibrary(state,viewModel,
                         onImport = { multiplePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onFiles = { files.launch(arrayOf("image/*","application/octet-stream")) },
-                        onAbout = { about = true },onPresets = { presets = true },onBatch = { batch = true })
+                        onAbout = { about = true },onPresets = { presets = true },onBatch = { batch = true },
+                        onLightTable={ viewModel.prepareLightTable();lightTable=true;returnToTable=false })
                 }
             }
             if (state.error != null) AlertDialog(
@@ -139,7 +155,7 @@ fun SpektraApp(viewModel: EditorViewModel) {
 
 
 @Composable
-private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit) {
+private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit,onBack: ()->Unit,backLabel: String) {
     var tool by rememberSaveable { mutableStateOf(EditorTool.LOOKS) }
     var cropping by rememberSaveable { mutableStateOf(false) }
     var more by rememberSaveable { mutableStateOf(false) }
@@ -147,8 +163,8 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
     var includeComposition by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = model::showLibrary, modifier = Modifier.width(48.dp),
-                contentPadding = PaddingValues(0.dp)) { Text("‹", fontSize = 30.sp, modifier = Modifier.semantics { contentDescription = "Back to photographs" }) }
+            TextButton(onClick = onBack, modifier = Modifier.width(48.dp),
+                contentPadding = PaddingValues(0.dp)) { Text("‹", fontSize = 30.sp, modifier = Modifier.semantics { contentDescription = backLabel }) }
             Text(state.photo?.displayName ?: "Photograph", Modifier.weight(1f), maxLines = 1,
                 overflow = TextOverflow.Ellipsis, fontSize = 13.sp, color = MutedColor)
             TextButton(onClick = model::undo, enabled = state.canUndo,
@@ -189,7 +205,8 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
 @Composable
 private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit, modifier: Modifier, showGrid: Boolean = false) {
     var compare by remember { mutableStateOf(false) }
-    val photo = if (compare) state.original else state.preview ?: state.original
+    val showingOriginal = compare || state.preview == null
+    val photo = if (showingOriginal) state.original else state.preview
     val framed = state.recipe.frame != FilmFrame.NONE || state.recipe.composition.aspect != CropAspect.FREE
     Column(modifier) {
         Box(Modifier.weight(1f).fillMaxWidth().background(CanvasColor).pointerInput(state.photo?.id, framed) {
@@ -202,7 +219,7 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
                 onDrag = { change, amount -> change.consume(); x += amount.x; y += amount.y },
             )
         }, contentAlignment = Alignment.Center) {
-            photo?.let { Image(it.asImageBitmap(), if (compare) "Original photograph" else "Processed photograph",
+            photo?.let { Image(it.asImageBitmap(), if (showingOriginal) "Original photograph" else "Processed photograph",
                 Modifier.fillMaxSize().padding(horizontal = 4.dp), contentScale = ContentScale.Fit) }
             if (showGrid && photo != null && !compare) Canvas(Modifier.matchParentSize()) {
                 val scale = minOf((size.width - 8.dp.toPx()) / photo.width, size.height / photo.height)
@@ -215,7 +232,11 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
                         androidx.compose.ui.geometry.Offset(x+w,y+h*i/3),1.dp.toPx())
                 }
             }
-            if (compare) Text("Original", Modifier.align(Alignment.TopStart).padding(12.dp)
+            if (showingOriginal) Text(when {
+                compare -> "Original"
+                state.rendering -> "Original · developing preview"
+                else -> "Original · preview unavailable"
+            }, Modifier.align(Alignment.TopStart).padding(12.dp)
                 .background(CanvasColor.copy(alpha = .85f), RoundedCornerShape(4.dp)).padding(8.dp), fontSize = 12.sp)
         }
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp),

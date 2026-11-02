@@ -1,5 +1,27 @@
 # Testing
 
+## Version 0.4.0-alpha.1 validation: 2026-11-02
+
+- All 24 core unit tests pass (including six Light Table geometry/state tests), with no failures or skipped tests.
+- All 16 Android instrumentation tests pass on API 35 x86_64 SwiftShader: 14 app and two engine tests. This includes the existing editor/export/project workflows, both Film/Paper regressions and five Light Table tests.
+- The table tests exercise lamp/brightness, real touch dragging, rotation, independent lens movement, eight-photo paging across nine photographs, repeated paging, source failure/retry, editor round trips, Activity recreation and background release/restoration.
+- The pixel test captures the actual Canvas and compares photo samples through the inverse transform before/after movement and rotation, including lamp off/dim states. A storage race test prevents backgrounding during initial load from saving default settings over the existing layout.
+- A further instrumentation run passes both workflow tests with three local real-photo derivatives repeated across nine entries, plus the controlled-gradient pixel test (three tests total). Actual lamp-on/loupe, lamp-off, editor-return and empty-state screenshots were visually inspected. Personal photos and screenshots are not committed or included in release assets.
+- In that real-photo run, retained board bitmaps total 5,586,944 bytes and one loupe bitmap 6,291,456 bytes. The feature owns zero bitmaps after backgrounding. Process PSS before backgrounding is about 153 MiB; this is a single emulator observation, not a phone memory/performance guarantee.
+- App lint reports zero errors and 14 warnings (tool/dependency updates, ChromeOS ABI support and Kotlin convenience extensions).
+- The versioned arm64 APK builds successfully and passes signature verification, 16 KB ZIP/native ELF alignment, bundled assets/licensing and native-path checks. Its certificate matches v0.3.0-alpha.1, and all native libraries/assets are byte-identical to that release. Version code is 4 and the application ID is unchanged. Device validation on a Galaxy S25 Ultra remains pending.
+
+### Material-preview regression evidence
+
+- A regression test fails on the original code because a newly selected material retains the previous recipe's preview. The fix invalidates that preview before debounce and labels an original-image fallback while developing or after failure.
+- New real-file tests cover all ten compatible Film/Paper combinations, repeated/warm and cold sessions, revisiting materials, PNG export agreement, rapid selection changes, corrupt-source failure and recovery.
+- A local 427 x 640 derivative of the existing KLCC photograph also passed all ten combinations. Visible differences were inspected on a contact sheet. Gold versus Portra is subtle (mean RGB absolute difference 1.14/255); CineStill comparisons are 3.43-3.84/255 and paper comparisons 3.54-7.74/255. These are measurements on one photograph, not universal perceptual thresholds.
+- The legacy RGBA8 and new file/float paths differ by only 0.014-0.019/255 on this controlled photograph with grain and halation disabled. No new float-path clipping regression was reproduced. The photograph's brighter print sky also appears in the desktop prototype sample.
+- The browser prototype reads pre-rendered desktop film JPEGs; its Paper selector never re-renders the sample. It is not a previous Android rendering baseline.
+- Before adding the Light Table, the material fix also passed 18 freshly executed core tests and 11 Android tests (two engine, nine app), with no skipped tests. Those regressions are included in the full version-0.4 suite above.
+- The earlier local material-fix arm64 build passed signing, 16 KB ZIP/native ELF alignment, bundled resources and attribution checks, with the preceding v0.3.0-alpha.1 certificate and unchanged native libraries/assets. The version-0.4 distribution is rebuilt and checked separately for publication.
+- S25 Ultra display, driver, actual camera files and performance validation remain pending.
+
 ## Version 0.3.0-alpha.1 validation: 2026-11-02
 
 - Eighteen core tests cover recipe compatibility/geometry, optional composition transfers, preset/queue serialization, format names and input bounds.
@@ -68,6 +90,7 @@ The developer does not yet have a connected S25 Ultra. Compilation or an emulato
 - Save JPEG, PNG, RGB16 TIFF and Ultra HDR. Check MIME/size, film edges and HDR rendering in a compatible viewer; TIFF may require a separate viewer.
 - Try an S25 Ultra Expert RAW DNG. Record camera mode/compression and error details if unsupported; never accept a thumbnail as a RAW-development success.
 - Check 2560/4096/Original with a standard photo; oversized Original jobs should explain the memory/GPU limit without silently shrinking.
+- Open Light table, move and rotate film, adjust lamp/brightness, inspect with the lens, change pages, edit and return, then background/reopen and check arrangement recovery.
 - Create projects and presets, copy settings with/without composition, select multiple photographs and batch export. Force-stop during a batch, reopen and Resume; published jobs must not duplicate.
 - Cancel an export; verify that no incomplete gallery item remains.
 - Rotate, leave/reopen and relaunch the app; check last-edit recovery.
