@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -260,6 +261,8 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
 
 @Composable
 private fun MaterialControls(state: EditorState, model: EditorViewModel) {
+    val artwork=if (state.material==MaterialTab.PAPER) rememberPaperSamples(state) else PaperSamplePresentation(PaperSampleState(),{})
+    val samples=artwork.state
     Column(Modifier.fillMaxWidth().background(PanelColor).padding(bottom = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             MaterialTab.entries.forEach { tab ->
@@ -274,7 +277,7 @@ private fun MaterialControls(state: EditorState, model: EditorViewModel) {
                 }
             }
         }
-        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        LazyRow(Modifier.testTag("material-options"),contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             when (state.material) {
                 MaterialTab.FILM -> items(Materials.films, key = { it.id }) { film ->
@@ -282,7 +285,7 @@ private fun MaterialControls(state: EditorState, model: EditorViewModel) {
                         onClick = { model.selectFilm(film.id) })
                 }
                 MaterialTab.PAPER -> items(Materials.compatiblePapers(state.recipe.filmId), key = { it.id }) { paper ->
-                    Choice(paper.id, paper.brand, paper.name, paper.id == state.recipe.paperId, paper = true,
+                    Choice(paper.id, paper.brand, paper.name, paper.id == state.recipe.paperId, paper = true, sample = samples.images[paper.id], sampleLoading = samples.loading && paper.id !in samples.failed,
                         onClick = { model.selectPaper(paper.id) })
                 }
                 MaterialTab.FRAME -> items(FilmFrame.entries, key = { it.name }) { frame ->
@@ -291,16 +294,21 @@ private fun MaterialControls(state: EditorState, model: EditorViewModel) {
                 }
             }
         }
+        if (samples.failed.isNotEmpty()) TextButton(onClick=artwork.retry,modifier=Modifier.align(Alignment.End)) { Text("Retry samples") }
     }
 }
 
 @Composable
 private fun Choice(id: String, brand: String, name: String, selected: Boolean,
-                   paper: Boolean = false, frame: FilmFrame? = null, onClick: () -> Unit) {
+                   paper: Boolean = false, frame: FilmFrame? = null, sample: Bitmap? = null, sampleLoading: Boolean = false, onClick: () -> Unit) {
     Column(Modifier.width(116.dp).selectable(selected, role = Role.RadioButton, onClick = onClick)
         .padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.fillMaxWidth().height(64.dp)) {
-            StockArt(id, Modifier.fillMaxSize(), paper, frame)
+            when {
+                frame!=null -> FrameArt(frame,Modifier.fillMaxSize())
+                paper -> PaperSample(id,sample,sampleLoading,Modifier.fillMaxSize())
+                else -> FilmCover(id,Modifier.fillMaxSize())
+            }
             if (selected) Text("✓", Modifier.align(Alignment.BottomEnd).padding(end = 4.dp)
                 .background(AccentColor, RoundedCornerShape(50)).padding(horizontal = 4.dp),
                 color = CanvasColor, fontSize = 12.sp)

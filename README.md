@@ -65,6 +65,6 @@ Android application and integration: Copyright (C) 2026 proleeeeeeeeee, GPL-3.0-
 
 This project builds on **SpektraLab by JamesQiu2005** and **spektrafilm by Andrea Volpato**. The pinned upstream code is GPLv3. The original spektrafilm film/paper profiles, constants and direct derivatives retain **CC BY-SA 4.0** and Andrea Volpato's attribution. Product profiles, fonts and bundled libraries retain their own notices. See [NOTICE.md](NOTICE.md), [LICENSE](LICENSE), and [LICENSES](LICENSES).
 
-No upstream authorship is claimed by the Android maintainer. The project is independent and is not endorsed by the named manufacturers; product names identify the simulated materials. The app's small stock illustrations are original vector drawings, not manufacturer packaging photographs.
+No upstream authorship is claimed by the Android maintainer. The project is independent and is not endorsed by the named manufacturers; product names identify the simulated materials. Frame-choice illustrations are original drawings. The selector-art update reuses the existing design's transparent film packaging cutouts (see [provenance](LICENSES/Selector-covers-NOTICE.md)); Paper options show live samples of the current photograph.
 
 Your finished photographs are yours; the profile license does not impose copyleft on them.

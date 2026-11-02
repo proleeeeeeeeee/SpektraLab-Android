@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1-alpha.1
+
+- Fix the lower Film option pictures by reusing the four existing transparent packaging cutouts, explicitly mapped to each film.
+- Replace the identical generic Paper icon with the current photo developed for each compatible paper, with bounded samples and an explicit retry action.
+- Guard sample identity across photos/parameters, avoid regeneration on paper-only selection, and release samples/engine on backgrounding or leaving the rail.
+- Add resource, actual option-image, touch/scroll, failure/retry and rapid photo/parameter-switch regressions.
+- Retain the Light Table and prior stale main-preview fix. Version code increases to 5 with the same application ID and signing identity.
+
+S25 Ultra hardware validation remains pending. Packaging-cutout provenance and separate rights are recorded in LICENSES/Selector-covers-NOTICE.md; no private photo is bundled.
+
 ## 0.4.0-alpha.1
 
 - Add a native Light Table for each project, with real edited photographs, backlight on/off and brightness.

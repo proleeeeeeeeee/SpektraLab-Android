@@ -1,5 +1,16 @@
 # Testing
 
+## Version 0.4.1-alpha.1 selector-art validation: 2026-11-02
+
+- The reported lower-option issue is reproduced in the previous source: Film uses a shared box drawing with color changes, while every Paper ID draws the same mountain. This is separate from the earlier main-photo preview regression. The existing design instead has four film cutouts and current-photo print samples; it has no separate Paper packaging assets.
+- Two new Android resource/UI tests pass in a 63.175-second real-photo run. They exercise the actual option images, not only engine output: four film resources map to the expected names, decode with transparency and bounded size, and missing resources recover without substituting another stock.
+- Sixteen actual UI image comparisons cover repeated four-film scrolling/selection, three color papers, the monochrome paper and the final rapid-switch result. Maximum mean RGB error is 1.302/255 against the corresponding resource or independently rendered sample, below the unchanged 2.5/255 threshold. References match BitmapPainter's integer destination alignment; the independent selected-state check and native touch/focus feedback are separated from image-content comparisons while actual touch selection is asserted.
+- Actual full-screen and option-image screenshots were viewed for all four films, three color paper samples, Ilford monochrome, unavailable samples with Retry, a second photograph and the final restored photo/recipe. No private photographs/screenshots are committed or distributed.
+- Seven rapid photo opens, thirteen parameter changes, six repeated paper selections, color/monochrome transitions, source failure/retry and background restoration pass. The observed retained sample bitmaps total 294,912 bytes and zero after backgrounding; FilmEngine threads drop from two to the main editor's one. Idle samples retain their bitmap identities instead of continuously regenerating. These are scoped emulator observations, not a proof of every possible leak or phone performance.
+- Final full-suite verification passes all 24 core tests and all 18 Android tests (16 app, two engine), with zero failures/skips. This retains the Light Table, editor/export/project and main-preview regressions. App lint has zero errors and 14 warnings.
+- The arm64 version-0.4.1 APK builds successfully, has version code 5 and the preceding release certificate, and passes 16 KB ZIP/native ELF alignment, required notices/resources and native-path checks. Native libraries and engine assets are byte-identical to version 0.4.0; no permissions were added. S25 Ultra hardware remains untested.
+
+
 ## Version 0.4.0-alpha.1 validation: 2026-11-02
 
 - All 24 core unit tests pass (including six Light Table geometry/state tests), with no failures or skipped tests.

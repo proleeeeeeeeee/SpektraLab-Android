@@ -36,6 +36,12 @@ Drawing, film hit testing and loupe sampling share the same translation/rotation
 
 The table's lamp affects its display only. Recipes, physical profiles, preview/export rendering and output pixels are not changed by lamp settings. A changed recipe clears the editor's old preview synchronously, before debounce; the original fallback is labelled so a new selection cannot masquerade as the prior render.
 
+## Material option artwork
+
+Film cover IDs map explicitly to four bundled transparent cutouts from the existing design, decoded off Main at no more than 512 pixels. Unknown, corrupt or missing resources show an unavailable label; another stock's cover is never substituted. Asynchronous cover state retains its stock/resource identity to reject stale decoding.
+
+Paper option samples use the current private source, full current recipe and each compatible paper through the existing renderSource path at 192 pixels. One short-lived serial engine develops at most three samples and then closes. A generation guard rejects old photo/recipe work; normalizing only the selected paper out of the request key avoids regenerating the same set after a paper-only selection. The UI independently checks this key before displaying samples. Leaving/backgrounding cancels work, closes the engine and clears sample bitmaps. Failures clear stale pictures and expose Retry samples. This display feature does not change physical profiles or export algorithms.
+
 ## Export
 
 Export snapshots the recipe and size, pauses preview and renders the private source at that exact requested size. Original uses the full decoded source. A conservative admission budget accounts for source, negative, staging, render arenas and readback; GPU limits can also reject a job. Nothing silently changes the chosen resolution. Full sessions are released after each job; there is no unsupported independent-tile approximation of spatial effects.

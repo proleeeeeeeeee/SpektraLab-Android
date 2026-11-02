@@ -28,4 +28,4 @@ The native engine incorporates volk (MIT), stb (MIT or public domain), Liberatio
 
 The application uses AndroidX/Jetpack Compose, Kotlin, kotlinx.coroutines and kotlinx.serialization, with their respective upstream licenses. Gradle wrapper files retain their Apache-2.0 notices. Third-party authors are credited, not added as repository collaborators.
 
-Manufacturer and product names are trademarks of their owners, used to identify simulated materials. The UI illustrations are original drawings, not photographs of actual product packaging.
+Manufacturer and product names are trademarks of their owners, used to identify simulated materials. Frame-choice illustrations are original drawings. This selector-art update also reuses the existing design prototype's film packaging cutouts; see LICENSES/Selector-covers-NOTICE.md for separate provenance and rights. Paper thumbnails are live samples of the current private photograph.
