@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0-alpha.1
+
+- Compare four or six real Film/Print combinations for one photograph in Test bench, customize compatible materials/grades, save a preset, or apply one undoable edit.
+- Export a real-photo recipe story as a 1280x1800 JPEG and open Android's share chooser only on request.
+- Import/export bounded, versioned recipe JSON with explicit confirmation, material/range validation and opt-in composition; no source image or private photo identity is included.
+- Back up projects, recipes, presets and Light Table marks/layouts to a user-selected offline ZIP, optionally including originals. Restore validated copies with fresh identities without replacing existing projects.
+- Reduce final-frame CPU readback scratch using bounded row bands and add single/batch export memory preflight. Grain/halation algorithms and full-resolution admission safeguards are retained.
+- Preserve editor Save/Discard history through feature navigation and retain file errors across foreground preview regeneration.
+
+This same-signature ARM64 prerelease has version code 14. New features were verified on an Android 35 emulator, not a physical S25 Ultra. Comparison previews are bounded, unsaved arrangements are not durable across process death, and large originals can still be rejected. See docs/RELEASE-v09.md for evidence and limits.
+
 ## 0.7.0-alpha.1
 
 - Replace the Materials / Tools main tabs with Presets / Negatives; keep materials in the editor and add a dedicated saved-preset library.

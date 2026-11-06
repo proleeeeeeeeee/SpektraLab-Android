@@ -35,6 +35,7 @@ struct EngineContext {
     std::vector<float> float_scan;
     uint32_t float_width=0,float_height=0;
     PhotoRegion photo_region;
+    AndroidRenderMetrics memory_metrics;
     spk_result cached_result{};
     std::atomic<bool> cancelled{false};
     std::mutex render_mutex;
@@ -283,11 +284,12 @@ void open_source(EngineContext& c,const std::string& path,const std::string& key
     if (!c.session) throw std::runtime_error(engine_error(c.engine,"Opening source pixels failed"));
     c.source_key=key;c.applied_parameters=actual;c.source_opens++;
 }
-void float_render(EngineContext& c,const std::string& params,std::vector<float>& pixels,uint32_t& w,uint32_t& h) {
+void float_render(EngineContext& c,const std::string& params,std::vector<float>& pixels,uint32_t& w,uint32_t& h,
+                  const std::array<float,8>* frame_gate=nullptr) {
     update_parameters(c,params);
     std::string error;
     bool negative_hit=false;
-    if (!android_float_render(c.session,pixels,w,h,error,&negative_hit)) throw std::runtime_error("High-precision render failed: "+error);
+    if (!android_float_render(c.session,pixels,w,h,error,&negative_hit,&c.memory_metrics,frame_gate,&c.cancelled)) throw std::runtime_error("High-precision render failed: "+error);
     if (c.cancelled.load()) throw std::runtime_error("Processing cancelled");
     c.print_renders++;if (!negative_hit) c.negative_builds++;
 }
@@ -313,15 +315,7 @@ PhotoRegion finish_frame_after_adjustments(EngineContext& c,const std::string& p
     frame.set("halation_amount",spk::Json(1.0));
     const auto frame_params=frame.dump();
     if (frame_params!=params) {
-        std::vector<float> stable;uint32_t fw=0,fh=0;
-        float_render(c,frame_params,stable,fw,fh);
-        if (fw!=w||fh!=h||stable.size()!=photo.size())
-            throw std::runtime_error("Frame and photograph geometry differ");
-        for (uint32_t y=0;y<h;++y) for(uint32_t x=0;x<w;++x) {
-            if (region.contains(x,y,w,h)) continue;
-            const size_t i=(size_t(y)*w+x)*3;
-            photo[i]=stable[i];photo[i+1]=stable[i+1];photo[i+2]=stable[i+2];
-        }
+        float_render(c,frame_params,photo,w,h,&region.gate);
         update_parameters(c,params);
     }
     return region;
@@ -389,6 +383,7 @@ jfloatArray export_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring pa
         // batch jobs therefore do not retain the previous photograph's planes.
         release_source(*c);
         struct Cleanup { EngineContext& c;~Cleanup(){release_source(c);} } cleanup{*c};
+        c->memory_metrics={};
         open_source(*c,path,"export",params,edge,uint64_t(budget));
         std::vector<float> sdr;uint32_t w=0,h=0;float_render(*c,params,sdr,w,h);
         const auto photo=finish_frame_after_adjustments(*c,params,sdr,w,h);
@@ -419,6 +414,14 @@ jlongArray statistics(JNIEnv* env,jobject,jlong handle) {
         const jlong values[]={jlong(c->source_opens),jlong(c->negative_builds),jlong(c->print_renders),jlong(c->tone_scans)};
         auto result=env->NewLongArray(4);if (result) env->SetLongArrayRegion(result,0,4,values);return result;
     } catch (const std::exception& error) { throw_error(env,error.what());return nullptr; }
+}
+jlongArray memory_statistics(JNIEnv* env,jobject,jlong handle) {
+    try {
+        auto c=context_for(handle);std::lock_guard<std::mutex> lock(c->render_mutex);
+        const auto& m=c->memory_metrics;
+        const jlong values[]={jlong(m.readback_bytes),jlong(m.frame_scratch_bytes),jlong(m.gpu_live_peak),jlong(m.gpu_resident_peak)};
+        auto result=env->NewLongArray(4);if(result)env->SetLongArrayRegion(result,0,4,values);return result;
+    } catch(const std::exception& e){throw_error(env,e.what());return nullptr;}
 }
 jstring capabilities(JNIEnv* env, jobject, jlong handle) {
     try {
@@ -453,6 +456,7 @@ const JNINativeMethod methods[] = {
     {const_cast<char*>("render"), const_cast<char*>("(JLandroid/graphics/Bitmap;Ljava/lang/String;Ljava/lang/String;[F)Landroid/graphics/Bitmap;"), reinterpret_cast<void*>(render)},
     {const_cast<char*>("capabilities"), const_cast<char*>("(J)Ljava/lang/String;"), reinterpret_cast<void*>(capabilities)},
     {const_cast<char*>("statistics"),const_cast<char*>("(J)[J"),reinterpret_cast<void*>(statistics)},
+    {const_cast<char*>("memoryStatistics"),const_cast<char*>("(J)[J"),reinterpret_cast<void*>(memory_statistics)},
     {const_cast<char*>("sourceInfo"),const_cast<char*>("(Ljava/lang/String;)[I"),reinterpret_cast<void*>(source_info)},
     {const_cast<char*>("sourcePreview"),const_cast<char*>("(Ljava/lang/String;IJ)Landroid/graphics/Bitmap;"),reinterpret_cast<void*>(source_preview)},
     {const_cast<char*>("renderFile"),const_cast<char*>("(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;[FIJZ)Landroid/graphics/Bitmap;"),reinterpret_cast<void*>(render_file)},

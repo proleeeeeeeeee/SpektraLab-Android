@@ -10,6 +10,10 @@ The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer w
 
 ## Current workflow
 
+- Test bench: four or six real Film/Print previews, editable combinations, preset saving and one-step application.
+- Recipe story: real-photo JPEG cards plus portable, versioned recipe JSON import/export. Sharing always uses an explicit Android chooser.
+- Offline project backups in Settings: optional originals, verified checksums and restoration as new project copies.
+- Export-memory preflight and bounded final-frame host readback, with existing full-resolution safeguards.
 - Photos / Presets / Negatives navigation, contextual library actions and a dedicated saved-look library.
 - A neutral darkroom interface with a portfolio-style photo grid and clear material selection.
 - A photo-first Crop / Film / Print / Adjust editor; Finish adds the independent Frame layer and one primary export action.
@@ -88,3 +92,5 @@ This project builds on **SpektraLab by JamesQiu2005** and **spektrafilm by Andre
 No upstream authorship is claimed by the Android maintainer. The project is independent and is not endorsed by the named manufacturers; product names identify the simulated materials. Frame-choice illustrations are original drawings. The selector-art update reuses the existing design's transparent film packaging cutouts (see [provenance](LICENSES/Selector-covers-NOTICE.md)); Paper options show live samples of the current photograph.
 
 Your finished photographs are yours; the profile license does not impose copyleft on them.
+
+See [v0.9 validation and limits](docs/RELEASE-v09.md), [Test bench and stories](docs/TEST-BENCH-STORIES.md), [project backups](docs/PROJECT-BACKUPS.md) and [export memory](docs/EXPORT-MEMORY.md).

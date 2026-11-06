@@ -37,5 +37,8 @@ internal fun memoryBudget(context: Context): Long {
     context.getSystemService(ActivityManager::class.java).getMemoryInfo(info)
     // Leave headroom for Android, the UI and the GPU driver. This is a job
     // admission budget, not permission to resize an Original export.
-    return minOf((info.availMem*.65).toLong(),(info.totalMem*.50).toLong()).coerceAtLeast(128L*1024*1024)
+    return minOf((info.availMem*.65).toLong(),(info.totalMem*.50).toLong()).coerceAtLeast(0L)
 }
+
+/** The same conservative budget used by native export admission. */
+fun availableRenderMemory(context: Context): Long = memoryBudget(context)

@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.proleeeeeeeeee.spektralab.core.*
 
-internal enum class WorkspacePage { PHOTOS, EDITOR, MATERIALS, PRESETS, NEGATIVE, SETTINGS }
+internal enum class WorkspacePage { PHOTOS, EDITOR, MATERIALS, PRESETS, NEGATIVE, SETTINGS, TEST_BENCH, STORY }
 internal enum class WorkspaceOverlay { NONE, PHOTO_EXPORT, BATCH_EXPORT, PRESETS }
 internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print"), FRAME("Frame"), ADJUST("Adjust"), CROP("Crop") }
 

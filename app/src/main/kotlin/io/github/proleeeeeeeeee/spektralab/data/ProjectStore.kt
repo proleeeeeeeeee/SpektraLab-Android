@@ -46,13 +46,11 @@ class PhotoStore(context: Context) {
     private val imports = File(application.filesDir, "imports").apply { mkdirs() }
     private val index = AtomicFile(File(application.filesDir, "projects.json"))
     private val legacy = AtomicFile(File(application.filesDir, "last-edit.json"))
-    private val lock = Mutex()
+    private val lock = storageLock
     private val codec = PhotoSource(application)
     private val json = Json { ignoreUnknownKeys = true }
-    private var loaded: ProjectLibrary? = null
 
     private fun read(): ProjectLibrary {
-        loaded?.let { return it }
         val restored = if (index.baseFile.exists() || File(index.baseFile.path+".bak").exists()) {
             check(index.baseFile.length() <= 4_194_304) { "Project index exceeds its storage limit" }
             json.decodeFromString<ProjectLibrary>(index.readFully().toString(Charsets.UTF_8))
@@ -71,14 +69,13 @@ class PhotoStore(context: Context) {
             require(project.name.isNotBlank() && project.name.length <= 80)
             project.photos.forEach { require(it.displayName.length <= 160); fileFor(it.id) }
         }
-        loaded = restored
         return restored
     }
     private fun write(value: ProjectLibrary) {
         val bytes = json.encodeToString(value).toByteArray()
         require(bytes.size <= 4_194_304) { "Project storage limit reached" }
         val stream = index.startWrite()
-        try { stream.write(bytes); index.finishWrite(stream); loaded = value }
+        try { stream.write(bytes); index.finishWrite(stream) }
         catch (failure: Throwable) { index.failWrite(stream); throw failure }
     }
     suspend fun library(): ProjectLibrary = withContext(Dispatchers.IO) { lock.withLock { read() } }
@@ -212,4 +209,58 @@ class PhotoStore(context: Context) {
         application.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)
             ?.use { if (it.moveToFirst()) it.getString(0).take(160) else null }
     }.getOrNull()?.replace(Regex("[\\p{Cntrl}]"),"")?.ifBlank { null } ?: "Photograph"
+
+    internal suspend fun <T> backupSnapshot(block: suspend (ProjectLibrary)->T): T = withContext(Dispatchers.IO) {
+        lock.withLock { block(read()) }
+    }
+
+    /** Fresh identities resolve conflicts; one atomic index write makes the copies visible. */
+    internal suspend fun restoreBackup(backup: ValidatedBackup): ProjectLibrary = withContext(Dispatchers.IO) {
+        lock.withLock {
+            val current=read();val incoming=backup.library
+            require(current.projects.size+incoming.projects.size<=100 && current.presets.size+incoming.presets.size<=200) { "Restoring would exceed the project or preset limit." }
+            require(current.projects.sumOf { it.photos.size }+incoming.projects.sumOf { it.photos.size }<=2000) { "Restoring would exceed the photo limit." }
+            val photoIds=incoming.projects.flatMap { it.photos }.associate { it.id to UUID.randomUUID().toString() }
+            val projectIds=incoming.projects.associate { it.id to UUID.randomUUID().toString() }
+            val copied=incoming.projects.map { project -> project.copy(id=projectIds.getValue(project.id),
+                name=(project.name.take(69)+" (restored)"),
+                photos=project.photos.map { it.copy(id=photoIds.getValue(it.id)) },selectedId=project.selectedId?.let(photoIds::getValue)) }
+            val presets=incoming.presets.map { preset -> preset.copy(id=UUID.randomUUID().toString(),
+                name=if(current.presets.any { it.name==preset.name })preset.name.take(69)+" (restored)" else preset.name) }
+            val tables=LightTableStore(application)
+            val ownedFiles=mutableListOf<File>();val ownedTables=mutableListOf<String>()
+            try {
+                for((oldId,newId) in photoIds) {
+                    currentCoroutineContext().ensureActive()
+                    val source=backup.sources.getValue(oldId);val destination=fileFor(newId)
+                    require(!destination.exists()) { "A restored identity conflicts with an existing photo." }
+                    check(source.renameTo(destination)) { "Could not move a validated original into project storage." }
+                    ownedFiles+=destination
+                }
+                for(project in incoming.projects) {
+                    currentCoroutineContext().ensureActive()
+                    val id=projectIds.getValue(project.id);val layout=backup.layouts.getValue(project.id)
+                    val restored=layout.copy(
+                        placements=layout.placements.map { it.copy(photoId=photoIds.getValue(it.photoId)) },
+                        filteredPlacements=layout.filteredPlacements.map { it.copy(photoId=photoIds.getValue(it.photoId)) },
+                        selectedId=layout.selectedId?.let(photoIds::getValue),
+                        reviews=layout.reviews.mapKeys { photoIds.getValue(it.key) },pickedIds=layout.pickedIds.map(photoIds::getValue).toSet())
+                    check(tables.save(id,restored,1)) { "Could not save the restored light-table layout." }
+                    ownedTables+=id
+                }
+                currentCoroutineContext().ensureActive()
+                val merged=current.copy(projects=current.projects+copied,presets=current.presets+presets,
+                    activeId=projectIds.getValue(incoming.activeId))
+                write(merged)
+                merged
+            } catch(failure: Throwable) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                    ownedFiles.forEach { it.delete() }
+                    for(id in ownedTables)tables.deleteRestored(id)
+                }
+                throw failure
+            }
+        }
+    }
+    companion object { private val storageLock=Mutex() }
 }

@@ -65,6 +65,11 @@ class FilmEngine(context: Context) : AutoCloseable {
         check(!closed && handle.get() != 0L) { "Engine is not ready" }
         NativeBridge.statistics(handle.get())
     }
+    /** Actual vector capacities and GPU pool observations for the last export. */
+    suspend fun exportMemoryMetrics(): LongArray = withContext(dispatcher) {
+        check(!closed && handle.get() != 0L) { "Engine is not ready" }
+        NativeBridge.memoryStatistics(handle.get())
+    }
     suspend fun prepareExport(file: File,info: SourceInfo,recipe: EditRecipe,settings: ExportSettings): PreparedExport = withContext(dispatcher) {
         check(!closed && handle.get() != 0L) { "Engine is not ready" }
         require(Build.VERSION.SDK_INT >= 30) { "Professional export requires Android 11 or newer" }

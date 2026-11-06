@@ -185,5 +185,15 @@ class LightTableViewModel(application: Application): AndroidViewModel(applicatio
             catch (failure: Exception) { if (state.value.project?.id==id) mutableState.update { it.copy(error=failure.message ?: "The layout was not saved. Try again.") } }
         }
     }
+    suspend fun prepareProjectBackup() {
+        pause()
+        kotlinx.coroutines.withTimeout(15_000) {
+            while(state.value.layoutReady && state.value.savedRevision<state.value.revision) {
+                check(state.value.error==null) { "The latest photo marks or layout are not saved. Retry before backing up." }
+                delay(20)
+            }
+        }
+    }
+    fun clearAfterProjectRestore() { pause();mutableState.value=LightTableState() }
     override fun onCleared() { engine?.close();super.onCleared() }
 }

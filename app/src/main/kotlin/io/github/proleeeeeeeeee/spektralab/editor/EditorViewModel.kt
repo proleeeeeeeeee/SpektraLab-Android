@@ -288,6 +288,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleSelected(id: String) { mutableState.update { it.copy(selection = if (id in it.selection) it.selection-id else it.selection+id) } }
     fun selectAll() { mutableState.update { it.copy(selection = it.library.active.photos.map { p -> p.id }.toSet()) } }
     fun clearSelection() { mutableState.update { it.copy(selection = emptySet()) } }
+    suspend fun prepareProjectBackup() {
+        check(toolStart==null && !state.value.importing && !state.value.exporting) { "Apply or cancel the current tool and finish processing first." }
+        finishInteraction();stopPreview()
+        kotlinx.coroutines.withTimeout(30_000) { while(pendingSaves.isNotEmpty() || state.value.savingEdits) delay(20) }
+        val photo=state.value.photo
+        if(photo!=null)check(store.library().photo(photo.id)?.recipe==state.value.recipe) { "The latest edit is not saved. Try again before backing up." }
+    }
+    suspend fun reloadAfterProjectRestore() {
+        stopPreview();previewCache.clear();history.reset();inspectedIdentity=null;inspectedInfo=null
+        mutableState.update { it.copy(library=store.library(),photo=null,original=null,preview=null,neutralPreview=null,
+            recipe=history.current,selection=emptySet(),showEditor=false,canUndo=false,canRedo=false) }
+    }
     fun prepareBatchSelection(ids: Set<String>): Boolean {
         if (state.value.exporting || state.value.importing) return false
         val valid=state.value.library.active.photos.filter { it.id in ids }.map { it.id }.toSet()
@@ -319,6 +331,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun savePreset(name: String, includeComposition: Boolean) = libraryAction {
         finishInteraction(); store.savePreset(name,RecipeTransfer(state.value.recipe,includeComposition))
         mutableState.update { it.copy(notice = "Preset saved") }
+    }
+    fun saveRecipePreset(name: String,settings: RecipeTransfer) = libraryAction {
+        store.savePreset(name,settings)
+        mutableState.update { it.copy(notice="Preset saved") }
+    }
+    fun applyBenchRecipe(photoId: String,recipe: EditRecipe): Boolean {
+        if(state.value.photo?.id!=photoId || !state.value.ready || state.value.importing || state.value.exporting || toolStart!=null)return false
+        finishInteraction();restoreRecipe(recipe);return true
     }
     fun applyPreset(id: String) {
         val preset = state.value.library.presets.firstOrNull { it.id == id } ?: return

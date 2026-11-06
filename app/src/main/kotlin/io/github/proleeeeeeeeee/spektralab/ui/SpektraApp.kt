@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -45,6 +46,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.proleeeeeeeeee.spektralab.core.*
 import io.github.proleeeeeeeeee.spektralab.editor.*
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,10 +96,11 @@ fun SpektraApp(viewModel: EditorViewModel) {
             openingPhotoId = null
     }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val lifecyclePage by rememberUpdatedState(page)
     DisposableEffect(lifecycle, sheetModel) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) { sheetModel.cancel(); viewModel.pausePreviews() }
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) viewModel.resumePreviews()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START && lifecyclePage in listOf(WorkspacePage.EDITOR,WorkspacePage.MATERIALS)) viewModel.resumePreviews()
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
@@ -125,6 +129,7 @@ fun SpektraApp(viewModel: EditorViewModel) {
             WorkspacePage.EDITOR -> returnToPhotos()
             WorkspacePage.MATERIALS -> page = materialReturn
             WorkspacePage.SETTINGS -> page = settingsReturn
+            WorkspacePage.TEST_BENCH,WorkspacePage.STORY -> { page=WorkspacePage.EDITOR;viewModel.resumePreviews() }
             else -> returnToPhotos()
         }
     }
@@ -156,7 +161,8 @@ fun SpektraApp(viewModel: EditorViewModel) {
                                     }
                                 } else Editor(state, viewModel, onExport = { overlay = WorkspaceOverlay.PHOTO_EXPORT },
                                     onPresets = { overlay = WorkspaceOverlay.PRESETS }, onBack = ::returnToPhotos,
-                                    backLabel = if (editorReturnLightTable) "Back to light table" else "Back to photos", onMaterials = ::openMaterials)
+                                    backLabel = if (editorReturnLightTable) "Back to light table" else "Back to photos", onMaterials = ::openMaterials,
+                                    onBench={viewModel.pausePreviews();page=WorkspacePage.TEST_BENCH},onStory={viewModel.pausePreviews();page=WorkspacePage.STORY})
                             }
                             WorkspacePage.MATERIALS -> MaterialBrowserScreen(state, viewModel,
                                 onBack = { page = materialReturn }, onChoosePhoto = importPhotos,
@@ -167,7 +173,11 @@ fun SpektraApp(viewModel: EditorViewModel) {
                             },onSettings=::openSettings)
                             WorkspacePage.NEGATIVE -> io.github.proleeeeeeeeee.spektralab.negative.NegativeScanScreen(
                                 onBack = ::returnToPhotos, model = negativeModel, onSettings = ::openSettings)
-                            WorkspacePage.SETTINGS -> SettingsScreen(state.capabilities, ::back)
+                            WorkspacePage.SETTINGS -> SettingsScreen(state.capabilities, ::back,viewModel,lightModel,!busy)
+                            WorkspacePage.TEST_BENCH -> state.photo?.let { TestBenchScreen(it.copy(recipe=state.recipe),viewModel,::back) }
+                                ?: TextButton(onClick=::returnToPhotos) { Text("Choose a photo from Photos") }
+                            WorkspacePage.STORY -> state.photo?.let { StoryCardScreen(it.copy(recipe=state.recipe),viewModel,::back) }
+                                ?: TextButton(onClick=::returnToPhotos) { Text("Choose a photo from Photos") }
                         }
                     }
                 }
@@ -219,7 +229,8 @@ fun SpektraApp(viewModel: EditorViewModel) {
                 onDismissRequest = { overlay = WorkspaceOverlay.NONE },
                 sheetState = exportSheetState
             ) {
-                PhotoExportOptions(onSave = { overlay = WorkspaceOverlay.NONE; viewModel.export(it) }, onClose = { overlay = WorkspaceOverlay.NONE }, ready = state.ready && !state.importing)
+                PhotoExportOptions(onSave = { overlay = WorkspaceOverlay.NONE; viewModel.export(it) }, onClose = { overlay = WorkspaceOverlay.NONE }, ready = state.ready && !state.importing,
+                    sources=state.photo?.let { listOf(ExportSourceSize(it.width,it.height,it.raw)) }.orEmpty())
             }
             if (overlay == WorkspaceOverlay.BATCH_EXPORT) ModalBottomSheet(
                 onDismissRequest = { overlay = WorkspaceOverlay.NONE },
@@ -228,6 +239,7 @@ fun SpektraApp(viewModel: EditorViewModel) {
                 val count = if (state.selection.isEmpty()) state.library.active.photos.size else state.selection.size
                 PhotoExportOptions(onSave = { overlay = WorkspaceOverlay.NONE; viewModel.startBatch(it, useCurrentLook) }, onClose = { overlay = WorkspaceOverlay.NONE },
                     scopeSummary = if (state.selection.isEmpty()) "Entire project, $count photos" else "$count photos selected", ready = state.ready && !state.importing, photoCount = count,
+                    sources=state.library.active.photos.filter { state.selection.isEmpty() || it.id in state.selection }.map { ExportSourceSize(it.width,it.height,it.raw) },
                     extraOptions = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(useCurrentLook, { useCurrentLook = it }, Modifier.testTag("batch-current-look"))
@@ -259,7 +271,7 @@ fun SpektraApp(viewModel: EditorViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit,
-                   onBack: () -> Unit, backLabel: String, onMaterials: () -> Unit) {
+                   onBack: () -> Unit, backLabel: String, onMaterials: () -> Unit,onBench: ()->Unit,onStory: ()->Unit) {
     var stage by rememberSaveable(state.photo?.id) { mutableStateOf("edit") }
     var pane by rememberSaveable(state.photo?.id) { mutableStateOf(EditorPane.FILM) }
     var panelOpen by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
@@ -270,7 +282,8 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
     var savePreset by remember { mutableStateOf(false) }
     var includeComposition by rememberSaveable { mutableStateOf(false) }
     var confirmExit by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
-    var entryRecipe by remember(state.photo?.id) { mutableStateOf(state.recipe) }
+    val entrySaver=remember { Saver<EditRecipe,String>(save={Json.encodeToString(it)},restore={Json.decodeFromString<EditRecipe>(it)}) }
+    var entryRecipe by rememberSaveable(state.photo?.id,stateSaver=entrySaver) { mutableStateOf(state.recipe) }
     val toolActive = panelOpen || floatingPanel
     val currentLook = remember(state.recipe.filmId, state.recipe.paperId) {
         runCatching { "${Materials.film(state.recipe.filmId).name}  ·  ${Materials.paper(state.recipe.paperId).name}" }
@@ -430,7 +443,8 @@ private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> U
     if (cropping && state.original != null) CropSheet(state.original, state.recipe.composition.crop,
         onCancel = { cropping = false }, onApply = { model.crop(it); cropping = false })
     if (more) EditorMoreSheet(state, model, includeComposition, { includeComposition = it },
-        onClose = { more = false }, onSavePreset = { more = false; savePreset = true }, onPresets = { more = false; onPresets() }, onBackToProject = { more=false; requestExit() })
+        onClose = { more = false }, onSavePreset = { more = false; savePreset = true }, onPresets = { more = false; onPresets() }, onBackToProject = { more=false; requestExit() },
+        onBench={more=false;onBench()},onStory={more=false;onStory()})
     if (savePreset) NameDialog("Save preset", onClose = { savePreset = false }) { model.savePreset(it, includeComposition); savePreset = false }
     if (confirmExit) AlertDialog(onDismissRequest = { confirmExit = false },
         title = { Text("Save changes to this photo?") },
@@ -559,7 +573,7 @@ private fun Choice(id: String, brand: String, name: String, selected: Boolean,
 }
 
 @Composable
-private fun SettingsScreen(capabilities: String, onBack: () -> Unit) {
+private fun SettingsScreen(capabilities: String, onBack: () -> Unit,editor: EditorViewModel,light: LightTableViewModel,canOperate: Boolean) {
     var about by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().testTag("settings-screen")) {
         Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -569,6 +583,7 @@ private fun SettingsScreen(capabilities: String, onBack: () -> Unit) {
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Text("SpektraLab", style = MaterialTheme.typography.headlineSmall)
             Text("Photography and darkroom tools on your phone.", color = MutedColor)
+            ProjectBackupPanel(editor,light,canOperate)
             Text("Regular photos", style = MaterialTheme.typography.titleMedium)
             Text("Import regular photos or RAW files under Photos, choose film and print materials, then adjust and compose. The library and light table share the same project, marks, and filters.")
             Text("Negative conversion", style = MaterialTheme.typography.titleMedium)

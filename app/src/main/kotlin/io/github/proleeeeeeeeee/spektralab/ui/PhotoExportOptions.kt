@@ -9,8 +9,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.proleeeeeeeeee.spektralab.core.*
+import io.github.proleeeeeeeeee.spektralab.engine.availableRenderMemory
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /** File options only: the caller owns single/batch scope, queue policy and publication. */
 @Composable
@@ -22,6 +26,7 @@ internal fun PhotoExportOptions(
     photoCount: Int = 1,
     hdrAvailable: Boolean = Build.VERSION.SDK_INT >= 34,
     hdrUnavailableReason: String? = null,
+    sources: List<ExportSourceSize> = emptyList(),
     extraOptions: @Composable ColumnScope.() -> Unit = {},
 ) {
     var format by rememberSaveable { mutableStateOf(ExportFormat.JPEG) }
@@ -29,14 +34,21 @@ internal fun PhotoExportOptions(
     var size by rememberSaveable { mutableStateOf(ExportSize.COMPACT) }
     var submitting by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
+    val context=LocalContext.current
+    var budget by remember { mutableLongStateOf(availableRenderMemory(context)) }
+    LaunchedEffect(Unit) { while(isActive) { delay(2000);budget=availableRenderMemory(context) } }
+    val estimates=remember(sources,size,format) { sources.mapNotNull { runCatching { estimateExportMemory(it,ExportSettings(format,size)) }.getOrNull() } }
+    val blocked=estimates.count { it.requiredBytes>budget }
+    val memoryReason=if(blocked>0) "$blocked photo(s) exceed the current memory budget. Choose a smaller output size or free memory and try again." else null
     val unavailable = when {
         photoCount <= 0 -> "Select the photos to export first."
         !ready -> "The export engine is getting ready. Please wait."
+        memoryReason!=null -> memoryReason
         format == ExportFormat.HDR_JPEG && !hdrAvailable -> hdrUnavailableReason ?: "Ultra HDR requires Android 14 or later."
         submitting -> "Creating export job…"
         else -> failure
     }
-    val allowed = ready && photoCount > 0 && !submitting && (format != ExportFormat.HDR_JPEG || hdrAvailable)
+    val allowed = ready && photoCount > 0 && !submitting && blocked==0 && (format != ExportFormat.HDR_JPEG || hdrAvailable)
     ExportSheetFrame(
         title = if (photoCount > 1) "Batch export" else "Export photo",
         summary = "$scopeSummary · ${format.exportLabel()} · ${size.exportLabel()}",
@@ -46,7 +58,7 @@ internal fun PhotoExportOptions(
         disabledReason = unavailable,
         actionTestTag = "photo-export-save",
         onAction = {
-            if (submitting || !ready || photoCount <= 0 || (format == ExportFormat.HDR_JPEG && !hdrAvailable)) return@ExportSheetFrame
+            if (!allowed) return@ExportSheetFrame
             submitting = true
             failure = null
             try { onSave(ExportSettings(format, size, quality.toInt())) }
@@ -76,6 +88,14 @@ internal fun PhotoExportOptions(
             else -> "8-bit sRGB saved as an opaque image."
         }, color = MutedColor, style = MaterialTheme.typography.bodySmall)
         ExportSectionTitle("Output size")
+        estimates.maxByOrNull { it.requiredBytes }?.let { estimate ->
+            Text("Largest input: "+estimate.decodedWidth+" × "+estimate.decodedHeight+" px. Estimated minimum: "+
+                (estimate.requiredBytes/(1024*1024))+" MB; current budget: "+(budget/(1024*1024))+" MB.",
+                color=if(blocked>0)MaterialTheme.colorScheme.error else MutedColor,
+                style=MaterialTheme.typography.bodySmall,modifier=Modifier.testTag("export-memory-estimate"))
+            Text("Frame, RAW decoding and the GPU driver can require more. Memory is checked again when export starts; output is never silently resized.",
+                color=MutedColor,style=MaterialTheme.typography.bodySmall)
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ExportSize.entries.forEach { kind ->
                 FilterChip(size == kind, { size = kind }, label = { Text(kind.exportLabel()) },

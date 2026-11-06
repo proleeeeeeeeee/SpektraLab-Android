@@ -45,4 +45,7 @@ class LightTableStore(context: Context) {
         }
     }
     companion object { private val lock=Mutex() }
+    internal suspend fun deleteRestored(id: String) = withContext(Dispatchers.IO) {
+        lock.withLock { file(id).delete() }
+    }
 }
