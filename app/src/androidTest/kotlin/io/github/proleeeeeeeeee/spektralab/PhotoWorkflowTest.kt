@@ -87,7 +87,7 @@ class PhotoWorkflowTest {
             compose.onNodeWithTag("editor-tool-adjust", useUnmergedTree = true).performClick()
             compose.onNodeWithContentDescription("Exposure adjustment", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(0.75f) }
-            compose.runOnIdle { model.finishInteraction() }
+            compose.onNodeWithTag("tool-apply", useUnmergedTree = true).performClick()
             assertEquals(.75,model.state.value.recipe.adjustments.exposure,.01)
             compose.onNodeWithTag("editor-undo", useUnmergedTree = true).performClick()
             assertEquals(0.0,model.state.value.recipe.adjustments.exposure,.01)
@@ -99,8 +99,10 @@ class PhotoWorkflowTest {
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(.7f) }
             compose.onNodeWithText("Apply crop", useUnmergedTree = true).performClick()
             assertEquals(.7,model.state.value.recipe.composition.crop.width,.01)
+            compose.onNodeWithTag("tool-apply", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("editor-tool-paper", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("material-choice-kodak_2383", useUnmergedTree = true).performScrollTo().performClick()
+            compose.onNodeWithTag("tool-apply", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("editor-tool-frame", useUnmergedTree = true).performClick()
             compose.onNodeWithTag("material-choice-SQUARE_120", useUnmergedTree = true).performScrollTo().performClick()
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.recipe.frame == FilmFrame.SQUARE_120 }

@@ -57,7 +57,7 @@ internal fun MaterialBrowserContent(
     val rail = rememberLazyListState()
     LaunchedEffect(tab, state.photo?.id) { rail.scrollToItem(choices.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)) }
     val panel: @Composable (Modifier) -> Unit = { panelModifier ->
-        Column(panelModifier.background(PanelColor).verticalScroll(rememberScrollState()).testTag("material-browser-options-panel")) {
+        Column(panelModifier.background(RaisedColor).verticalScroll(rememberScrollState()).testTag("material-browser-options-panel")) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for ((value, label) in listOf(MaterialTab.FILM to "Film", MaterialTab.PAPER to "Print material")) {
                     FilterChip(selected = tab == value, onClick = { tab = value; onTab(value) }, label = { Text(label) },
@@ -125,10 +125,11 @@ private data class MaterialBrowserEntry(val id: String, val brand: String, val n
 @Composable
 private fun BrowserMaterialChoice(item: MaterialBrowserEntry, selected: Boolean, paper: Boolean, image: android.graphics.Bitmap?,
                                   hasPhoto: Boolean, loading: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    Column(Modifier.width(136.dp).selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
-        .testTag("material-choice-${item.id}").border(if (selected) 1.dp else 0.dp,
-            if (selected) AccentColor else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(8.dp))
-        .padding(horizontal = 8.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.width(144.dp).selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+        .testTag("material-choice-${item.id}")
+        .background(if (selected) ChromeColor else CanvasColor.copy(alpha = .35f), RoundedCornerShape(6.dp))
+        .border(1.dp, if (selected) AccentColor else HairlineColor, RoundedCornerShape(6.dp))
+        .padding(horizontal = 8.dp, vertical = 8.dp), horizontalAlignment = Alignment.Start) {
         if (paper) PaperSample(item.id, image, loading, Modifier.fillMaxWidth().height(96.dp), hasPhoto, large = true)
         else FilmCover(item.id, Modifier.fillMaxWidth().height(96.dp))
         Spacer(Modifier.height(8.dp))
@@ -141,7 +142,7 @@ private fun BrowserMaterialChoice(item: MaterialBrowserEntry, selected: Boolean,
 
 @Composable
 private fun MaterialBrowserPreview(state: EditorState, hasPhoto: Boolean, onChoosePhoto: () -> Unit, modifier: Modifier) {
-    Box(modifier.background(CanvasColor).padding(12.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.background(PreviewWellColor).padding(16.dp), contentAlignment = Alignment.Center) {
         if (!hasPhoto) Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Select a photo to preview the effect", style = MaterialTheme.typography.titleMedium, color = PaperWhite)
             Text("You can browse material details and sources first", style = MaterialTheme.typography.bodySmall, color = MutedColor)

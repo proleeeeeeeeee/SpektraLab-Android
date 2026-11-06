@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
@@ -24,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,8 +61,9 @@ internal fun ProjectActions(state: EditorState, model: EditorViewModel, modifier
     Box(modifier) {
         TextButton(onClick = { menu = true }, enabled = !state.importing && !state.exporting,
             modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-project")) {
-            Text(state.library.active.name + " ▾", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleLarge,color=PaperWhite)
+            Text(state.library.active.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleLarge, color = PaperWhite, fontWeight = FontWeight.Medium)
+            Text("  ▾", color = MutedColor, style = MaterialTheme.typography.bodySmall)
         }
         DropdownMenu(menu, { menu = false }) {
             state.library.projects.forEach { project -> DropdownMenuItem(text = { Text(project.name) },
@@ -100,9 +103,9 @@ internal fun WorkspacePhotoGrid(
     modifier: Modifier = Modifier,
 ) {
     val numbers = remember(allPhotographs) { allPhotographs.mapIndexed { index, photo -> photo.id to index + 1 }.toMap() }
-    LazyVerticalGrid(GridCells.Adaptive(132.dp), modifier.testTag("workspace-grid"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyVerticalGrid(GridCells.Adaptive(156.dp), modifier.testTag("workspace-grid"),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         items(photographs, key = { it.id }) { photo ->
             val mark = layout.reviews[photo.id] ?: PhotoReview()
             WorkspacePhotoTile(photo, numbers[photo.id] ?: 0, photo.id in selected, selectionMode,
@@ -127,21 +130,23 @@ private fun WorkspacePhotoTile(photo: StoredPhoto, number: Int, selected: Boolea
         }
     }
     Column(Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().aspectRatio(.85f).clip(RoundedCornerShape(8.dp)).background(PanelColor)
+        Box(Modifier.fillMaxWidth().aspectRatio(.8f)
+            .border(if (selected) 2.dp else 1.dp, if (selected) AccentColor else HairlineColor, RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(3.dp)).background(PreviewWellColor)
             .testTag("photo-open-${photo.id}")
             .combinedClickable(onClick = onOpen, onLongClick = onSelect)) {
-            bitmap?.let { Image(it.asImageBitmap(), photo.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            bitmap?.let { Image(it.asImageBitmap(), photo.displayName, Modifier.fillMaxSize().padding(3.dp), contentScale = ContentScale.Crop) }
             Text(number.toString().padStart(3, '0'), color = PaperWhite,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
-                    .background(CanvasColor.copy(alpha = .78f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 3.dp))
+                    .background(CanvasColor.copy(alpha = .72f), RoundedCornerShape(2.dp)).padding(horizontal = 6.dp, vertical = 3.dp))
             if (selectionMode) Checkbox(selected, { onSelect() },
                 Modifier.align(Alignment.TopEnd).testTag("photo-select-${photo.id}")
                     .semantics { contentDescription = "Select ${photo.displayName}" })
             if (review.color != ReviewColor.NONE) Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)
                 .size(10.dp).background(review.color.swatch(), RoundedCornerShape(5.dp)))
         }
-        Text(photo.displayName, Modifier.padding(top = 7.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(photo.displayName, Modifier.padding(top = 8.dp, start = 1.dp, end = 1.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (selected) AccentColor else PaperWhite, style = MaterialTheme.typography.bodySmall)
         if (review.rating > 0 || review.flag != ReviewFlag.NONE) Text((if (review.rating > 0) "${review.rating}★" else "") +
             if (review.flag == ReviewFlag.NONE) "" else "  ${reviewFlagName(review.flag)}",

@@ -121,6 +121,8 @@ class LightTableWorkflowTest {
             openControls()
             compose.onNodeWithContentDescription("Light-table backlight brightness").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(.9f) }
             closeControls()
+            compose.onNodeWithTag("table-loupe").performClick()
+            assertTrue(light.state.value.layout.loupeEnabled)
             val posesBeforeLens=light.state.value.layout.placements
             val lensBefore=light.state.value.layout
             val target=posesBeforeLens.first { it.photoId==id }
@@ -172,7 +174,11 @@ class LightTableWorkflowTest {
             compose.runOnIdle { model.selectFilm("kodak_portra_400") }
             compose.waitUntil(120_000) { !model.state.value.rendering && model.state.value.preview!=null }
             assertEquals("kodak_portra_400",model.state.value.recipe.filmId)
-            compose.onNodeWithTag("editor-back").performClick();waitPage(8)
+            compose.onNodeWithTag("editor-back").performClick()
+            compose.waitForIdle()
+            if (compose.onAllNodesWithTag("editor-save-close").fetchSemanticsNodes().isNotEmpty())
+                compose.onNodeWithTag("editor-save-close").performClick()
+            waitPage(8)
             assertEquals(retained,light.state.value.layout.placements)
             screenshot("returned-from-editor")
             val report=JSONObject().put("photos",9).put("pageSize",8).put("boardBitmapBytes",imageBytes)

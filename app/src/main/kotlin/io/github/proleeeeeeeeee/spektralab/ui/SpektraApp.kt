@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -259,104 +260,191 @@ fun SpektraApp(viewModel: EditorViewModel) {
 @Composable
 private fun Editor(state: EditorState, model: EditorViewModel, onExport: () -> Unit, onPresets: () -> Unit,
                    onBack: () -> Unit, backLabel: String, onMaterials: () -> Unit) {
-    var pane by rememberSaveable { mutableStateOf(EditorPane.FILM) }
-    var panelOpen by rememberSaveable { mutableStateOf(true) }
-    var floatingPanel by rememberSaveable { mutableStateOf(false) }
+    var stage by rememberSaveable(state.photo?.id) { mutableStateOf("edit") }
+    var pane by rememberSaveable(state.photo?.id) { mutableStateOf(EditorPane.FILM) }
+    var panelOpen by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
+    var floatingPanel by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
     val floatingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var cropping by rememberSaveable { mutableStateOf(false) }
-    var more by rememberSaveable { mutableStateOf(false) }
+    var cropping by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
+    var more by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
     var savePreset by remember { mutableStateOf(false) }
     var includeComposition by rememberSaveable { mutableStateOf(false) }
-    val browseMaterials = { floatingPanel=false;model.finishInteraction();onMaterials() }
+    var confirmExit by rememberSaveable(state.photo?.id) { mutableStateOf(false) }
+    var entryRecipe by remember(state.photo?.id) { mutableStateOf(state.recipe) }
+    val toolActive = panelOpen || floatingPanel
+    val currentLook = remember(state.recipe.filmId, state.recipe.paperId) {
+        runCatching { "${Materials.film(state.recipe.filmId).name}  ·  ${Materials.paper(state.recipe.paperId).name}" }
+            .getOrDefault("Film and print")
+    }
+
+    fun requestExit() {
+        model.finishInteraction()
+        if (state.recipe != entryRecipe) confirmExit = true else onBack()
+    }
+    fun closeTool(apply: Boolean) {
+        if (apply) model.commitToolEdit() else model.cancelToolEdit()
+        panelOpen = false; floatingPanel = false; cropping = false
+    }
+    val browseMaterials = { model.cancelToolEdit(); panelOpen=false;floatingPanel=false;onMaterials() }
+    BackHandler {
+        when {
+            cropping -> cropping = false
+            toolActive -> closeTool(false)
+            stage == "finish" -> stage = "edit"
+            else -> requestExit()
+        }
+    }
+
     Column(Modifier.fillMaxSize().testTag("editor-screen")) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-back"), contentPadding = PaddingValues(0.dp)) {
-                Box(Modifier.semantics { contentDescription = backLabel }) { UiIcon("back") }
+        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).background(ChromeColor).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = {
+                if (stage == "finish") stage = "edit" else requestExit()
+            }, enabled = !toolActive, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-back"),
+                contentPadding = PaddingValues(horizontal = 6.dp)) {
+                UiIcon("back")
+                if (stage == "finish") Text("Edit", Modifier.padding(start = 4.dp))
             }
-            Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                Text(state.photo?.displayName ?: "Photos", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
-                Text(Materials.film(state.recipe.filmId).name + " / " + Materials.paper(state.recipe.paperId).name,
+            Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.Start) {
+                Text(if (stage == "finish") "Finish" else state.photo?.displayName ?: "Photo",
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium)
+                Text(if (stage == "finish") "Frame is added after the photo look" else currentLook,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp, color = MutedColor)
             }
-            TextButton(onClick = { model.finishInteraction(); more = true }, modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp).testTag("editor-more").semantics { contentDescription="More editing actions" }) { UiIcon("more") }
-            Button(onClick = { model.finishInteraction();onExport() }, enabled = state.ready && !state.importing,
-                colors=ButtonDefaults.buttonColors(containerColor=PaperWhite,contentColor=CanvasColor),shape=RoundedCornerShape(7.dp),
-                contentPadding=PaddingValues(horizontal=14.dp),modifier = Modifier.heightIn(min = 40.dp).testTag("editor-export")) { Text("Export") }
+            if (stage == "edit") {
+                TextButton(onClick = { model.finishInteraction(); more = true }, enabled = !toolActive,
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-more")
+                        .semantics { contentDescription = "Photo actions" }) { UiIcon("more") }
+                Button(onClick = { model.finishInteraction(); stage = "finish" }, enabled = !toolActive && state.ready,
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = CanvasColor),
+                    shape = RoundedCornerShape(8.dp), modifier = Modifier.heightIn(min = 48.dp).testTag("editor-tool-frame").semantics { contentDescription = "Finish and choose a frame" }) { Text("Finish") }
+            } else {
+                Spacer(Modifier.width(48.dp))
+            }
         }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+
+        if (stage == "finish") {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val wide = maxWidth >= 540.dp && maxWidth > maxHeight
+                val finishControlsHeight = maxHeight * .48f
+                val options: @Composable () -> Unit = {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Frame", color = PaperWhite, style = MaterialTheme.typography.titleMedium)
+                            Text("Optional final layer", color = MutedColor, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("Photo  →  Frame  →  Export", color = MutedColor, fontSize = 11.sp)
+                    }
+                    LazyRow(Modifier.testTag("frame-options"), contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(FilmFrame.entries, key = { it.name }) { frame ->
+                            Choice(frame.name, "", frame.uiLabel(), frame == state.recipe.frame, frame = frame,
+                                onClick = { model.selectFrame(frame) })
+                        }
+                    }
+                    Text("Choose a frame, then export a new copy. Your original stays unchanged.",
+                        Modifier.padding(horizontal = 18.dp, vertical = 6.dp), color = MutedColor, style = MaterialTheme.typography.bodySmall)
+                }
+                val export: @Composable () -> Unit = {
+                    Button(onClick = onExport, enabled = state.ready && !state.importing,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 52.dp).testTag("editor-export"),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = CanvasColor),
+                        shape = RoundedCornerShape(8.dp)) { Text("Export photo", Modifier.testTag("finish-export"), fontWeight = FontWeight.SemiBold) }
+                }
+                if (wide) Row(Modifier.fillMaxSize()) {
+                    PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxHeight(), false, model::undo, model::redo)
+                    Column(Modifier.width(340.dp).fillMaxHeight().background(RaisedColor).padding(bottom = 10.dp)) {
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { options() }
+                        export()
+                    }
+                } else Column(Modifier.fillMaxSize()) {
+                    PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth(), false, model::undo, model::redo)
+                    Column(Modifier.fillMaxWidth().heightIn(max = finishControlsHeight).background(RaisedColor).verticalScroll(rememberScrollState())) { options() }
+                    Column(Modifier.fillMaxWidth().background(RaisedColor).padding(vertical = 10.dp)) { export() }
+                }
+            }
+        } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val tallText = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.35f
             val wide = maxWidth >= 540.dp && maxWidth > maxHeight
             val controlsMaxHeight = maxHeight * .43f
+            fun openTool(item: EditorPane) {
+                model.beginToolEdit(); pane = item
+                when (item) { EditorPane.FILM -> model.selectTab(MaterialTab.FILM); EditorPane.PAPER -> model.selectTab(MaterialTab.PAPER); else -> Unit }
+                panelOpen = true; floatingPanel = tallText && !wide
+            }
             val controls: @Composable () -> Unit = {
                 when (pane) {
-                    EditorPane.FILM -> MaterialControls(state, model, MaterialTab.FILM, browseMaterials,wide || tallText)
-                    EditorPane.PAPER -> MaterialControls(state, model, MaterialTab.PAPER, browseMaterials,wide || tallText)
+                    EditorPane.FILM -> MaterialControls(state, model, MaterialTab.FILM, browseMaterials, true)
+                    EditorPane.PAPER -> MaterialControls(state, model, MaterialTab.PAPER, browseMaterials, true)
                     EditorPane.ADJUST -> AdjustmentControls(state, model)
-                    EditorPane.FRAME -> Column {
-                        Text("Film frame", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = MutedColor)
-                        LazyRow(Modifier.testTag("frame-options"), contentPadding = PaddingValues(horizontal = 12.dp)) {
-                            items(FilmFrame.entries, key = { it.name }) { frame -> Choice(frame.name, "", frame.uiLabel(), frame == state.recipe.frame, frame = frame, onClick = { model.selectFrame(frame) }) }
+                    EditorPane.CROP -> CompositionControls(state, model, onCrop = { cropping = true })
+                    EditorPane.FRAME -> Unit
+                }
+            }
+            val panel: @Composable () -> Unit = {
+                Column(Modifier.fillMaxWidth().background(RaisedColor)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { closeTool(false) }, modifier = Modifier.heightIn(min = 48.dp).testTag("tool-cancel")) { Text("Cancel") }
+                        Text(pane.title, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            style = MaterialTheme.typography.titleMedium)
+                        TextButton(onClick = { closeTool(true) }, modifier = Modifier.heightIn(min = 48.dp).testTag("tool-apply")) {
+                            Text("Apply", color = AccentColor, fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    EditorPane.CROP -> CompositionControls(state, model, onCrop = { model.finishInteraction(); cropping = true })
+                    controls()
                 }
             }
             val tools: @Composable () -> Unit = {
-                LazyRow(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal = 4.dp, vertical = 3.dp),horizontalArrangement=Arrangement.SpaceEvenly) {
-                    items(EditorPane.entries,key={it.name}) { item ->
-                        TextButton(onClick = {
-                            model.finishInteraction(); pane = item
-                            when (item) { EditorPane.FILM -> model.selectTab(MaterialTab.FILM); EditorPane.PAPER -> model.selectTab(MaterialTab.PAPER); else -> Unit }
-                            if (tallText && !wide) floatingPanel = true else panelOpen = true
-                        },contentPadding=PaddingValues(horizontal=7.dp,vertical=3.dp),
-                            modifier = Modifier.widthIn(min=62.dp).heightIn(min = 54.dp).testTag("editor-tool-${item.name.lowercase()}")) {
-                            Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                UiIcon(item.title,if (pane==item && panelOpen) AccentColor else MutedColor)
-                                Text(item.title,color=if (pane==item && panelOpen) AccentColor else MutedColor,fontSize=12.sp)
+                val items = listOf(EditorPane.CROP, EditorPane.FILM, EditorPane.PAPER, EditorPane.ADJUST)
+                Row(Modifier.fillMaxWidth().background(ChromeColor)
+                    .border(width = 1.dp, color = HairlineColor).padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly) {
+                    items.forEach { item ->
+                        TextButton(onClick = { openTool(item) }, enabled = !toolActive,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 58.dp).testTag("editor-tool-${item.name.lowercase()}")) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                UiIcon(item.title, if (pane == item && toolActive) AccentColor else MutedColor)
+                                Text(item.title, color = if (pane == item && toolActive) AccentColor else MutedColor, fontSize = 12.sp)
                             }
                         }
                     }
                 }
             }
             if (wide) Row(Modifier.fillMaxSize()) {
-                PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxHeight(), pane == EditorPane.CROP, model::undo, model::redo)
-                Column(Modifier.width(296.dp).fillMaxHeight().verticalScroll(rememberScrollState())) { tools(); if (panelOpen) controls() }
-            } else Column(Modifier.fillMaxSize()) {
-                PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth(), pane == EditorPane.CROP, model::undo, model::redo)
-                if (panelOpen && !tallText) Column(Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight).verticalScroll(rememberScrollState())) {
-                    Row(Modifier.fillMaxWidth().background(PanelColor).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text(if (pane==EditorPane.FILM) Materials.film(state.recipe.filmId).name else if (pane==EditorPane.PAPER) Materials.paper(state.recipe.paperId).name else pane.title,
-                            Modifier.weight(1f),color=PaperWhite,fontSize=13.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        if (pane==EditorPane.FILM || pane==EditorPane.PAPER) TextButton(onClick=browseMaterials,
-                            modifier=Modifier.heightIn(min=44.dp).testTag("open-material-browser")) { Text("All materials",fontSize=12.sp) }
-                        TextButton(onClick={model.finishInteraction();panelOpen=false},modifier=Modifier.size(44.dp).testTag("editor-panel-toggle").semantics { contentDescription="Collapse tools" },contentPadding=PaddingValues(0.dp)) { UiIcon("down",MutedColor) }
-                    }
-                    controls()
+                PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxHeight(), pane == EditorPane.CROP && toolActive, model::undo, model::redo)
+                Column(Modifier.width(320.dp).fillMaxHeight()) {
+                    if (panelOpen) Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { panel() } else Spacer(Modifier.weight(1f))
+                    tools()
                 }
+            } else Column(Modifier.fillMaxSize()) {
+                PhotoPreview(state, model::moveFraming, Modifier.weight(1f).fillMaxWidth(), pane == EditorPane.CROP && toolActive, model::undo, model::redo)
+                if (panelOpen && !tallText) Column(Modifier.fillMaxWidth().heightIn(max = controlsMaxHeight).verticalScroll(rememberScrollState())) { panel() }
                 tools()
             }
-            if (floatingPanel) ModalBottomSheet(
-                onDismissRequest = { floatingPanel = false },
-                sheetState = floatingSheetState
-            ) {
-                Column(Modifier.fillMaxWidth().heightIn(max = 640.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(pane.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                        TextButton(onClick = { floatingPanel = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Done") }
-                    }
-                    controls()
-                }
+            if (floatingPanel) ModalBottomSheet(onDismissRequest = { closeTool(false) }, sheetState = floatingSheetState) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 640.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) { panel() }
             }
         }
     }
     if (cropping && state.original != null) CropSheet(state.original, state.recipe.composition.crop,
         onCancel = { cropping = false }, onApply = { model.crop(it); cropping = false })
     if (more) EditorMoreSheet(state, model, includeComposition, { includeComposition = it },
-        onClose = { more = false }, onSavePreset = { more = false; savePreset = true }, onPresets = { more = false; onPresets() }, onBackToProject = onBack)
+        onClose = { more = false }, onSavePreset = { more = false; savePreset = true }, onPresets = { more = false; onPresets() }, onBackToProject = { more=false; requestExit() })
     if (savePreset) NameDialog("Save preset", onClose = { savePreset = false }) { model.savePreset(it, includeComposition); savePreset = false }
+    if (confirmExit) AlertDialog(onDismissRequest = { confirmExit = false },
+        title = { Text("Save changes to this photo?") },
+        text = { Text("Save keeps this editable recipe. Discard restores the recipe from when you opened the photo; the original file is never changed.") },
+        confirmButton = { Button(onClick = { entryRecipe = state.recipe; confirmExit = false; onBack() },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("editor-save-close")) { Text("Save and close") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { val original=entryRecipe;confirmExit=false;model.restoreRecipe(original);onBack() },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("editor-discard")) { Text("Discard") }
+                TextButton(onClick = { confirmExit = false }, modifier = Modifier.heightIn(min = 48.dp).testTag("editor-keep-editing")) { Text("Keep editing") }
+            }
+        })
 }
-
-
 @Composable
 private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit, modifier: Modifier, showGrid: Boolean = false, onUndo: () -> Unit = {}, onRedo: () -> Unit = {}) {
     var compare by remember(state.photo?.id) { mutableStateOf(false) }
@@ -365,7 +453,7 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
     val photo = if (showingOriginal) state.original else if (fast) state.neutralPreview else state.preview
     val framed = state.recipe.frame != FilmFrame.NONE || state.recipe.composition.aspect != CropAspect.FREE
     Column(modifier) {
-        Box(Modifier.weight(1f).fillMaxWidth().background(CanvasColor).pointerInput(state.photo?.id, framed) {
+        Box(Modifier.weight(1f).fillMaxWidth().background(PreviewWellColor).pointerInput(state.photo?.id, framed) {
             if (!framed) return@pointerInput
             var x = 0f
             var y = 0f
@@ -376,10 +464,11 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
             )
         }, contentAlignment = Alignment.Center) {
             photo?.let { Image(it.asImageBitmap(), if (showingOriginal) "Original photo" else "Processed photo",
-                Modifier.fillMaxSize().testTag("editor-preview-image").padding(horizontal = 4.dp)
+                Modifier.fillMaxSize().testTag("editor-preview-image").padding(horizontal = 14.dp, vertical = 12.dp)
                     .fastScanPreview(if (fast) state.fastAdjustments else null), contentScale = ContentScale.Fit) }
             if (showGrid && photo != null && !compare) Canvas(Modifier.matchParentSize()) {
-                val scale = minOf((size.width - 8.dp.toPx()) / photo.width, size.height / photo.height)
+                val insetX = 14.dp.toPx(); val insetY = 12.dp.toPx()
+                val scale = minOf((size.width - insetX * 2) / photo.width, (size.height - insetY * 2) / photo.height)
                 val w = photo.width * scale; val h = photo.height * scale
                 val x = (size.width-w)/2; val y = (size.height-h)/2
                 for (i in 1..2) {
@@ -400,12 +489,12 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
                 Modifier.align(Alignment.TopStart).padding(12.dp).testTag("preview-status")
                     .background(CanvasColor.copy(alpha=.85f),RoundedCornerShape(4.dp)).padding(6.dp),color=MutedColor,fontSize=11.sp)
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(ChromeColor).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onUndo, enabled = state.canUndo, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-undo")) {
-                Text("↶", fontSize = 24.sp, modifier = Modifier.semantics { contentDescription = "Undo" })
+                Text("↶", fontSize = 22.sp, modifier = Modifier.semantics { contentDescription = "Undo" })
             }
             TextButton(onClick = onRedo, enabled = state.canRedo, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("editor-redo")) {
-                Text("↷", fontSize = 24.sp, modifier = Modifier.semantics { contentDescription = "Redo" })
+                Text("↷", fontSize = 22.sp, modifier = Modifier.semantics { contentDescription = "Redo" })
             }
             Spacer(Modifier.weight(1f))
             Text("Hold for original", Modifier.heightIn(min = 48.dp).wrapContentHeight().padding(horizontal = 12.dp)
@@ -422,11 +511,15 @@ private fun PhotoPreview(state: EditorState, onFraming: (Double, Double) -> Unit
 private fun MaterialControls(state: EditorState, model: EditorViewModel, tab: MaterialTab, onBrowse: () -> Unit, showBrowse: Boolean = false) {
     val artwork = if (tab == MaterialTab.PAPER) rememberPaperSamples(state) else PaperSamplePresentation(PaperSampleState(), {})
     val samples = artwork.state
-    Column(Modifier.fillMaxWidth().background(PanelColor).padding(bottom = 8.dp)) {
-        // Wide and large-text sheets retain their own catalog entry.
-        if (showBrowse)
-            TextButton(onClick=onBrowse,modifier=Modifier.align(Alignment.End).heightIn(min=44.dp).testTag("open-material-browser")) { Text("All materials") }
-        LazyRow(Modifier.testTag("material-options"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().background(RaisedColor).padding(bottom = 8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(if (tab == MaterialTab.FILM) "Film stock" else "Print material", style = MaterialTheme.typography.titleMedium)
+                Text("Selection updates the main photograph", color = MutedColor, style = MaterialTheme.typography.bodySmall)
+            }
+            if (showBrowse) TextButton(onClick=onBrowse,modifier=Modifier.heightIn(min=48.dp).testTag("open-material-browser")) { Text("Browse all") }
+        }
+        LazyRow(Modifier.testTag("material-options"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (tab == MaterialTab.FILM) items(Materials.films, key = { it.id }) { film ->
                 Choice(film.id, film.brand, film.name, film.id == state.recipe.filmId, onClick = { model.selectFilm(film.id) })
             } else items(Materials.compatiblePapers(state.recipe.filmId), key = { it.id }) { paper ->
@@ -443,21 +536,23 @@ private fun MaterialControls(state: EditorState, model: EditorViewModel, tab: Ma
 @Composable
 private fun Choice(id: String, brand: String, name: String, selected: Boolean,
                    paper: Boolean = false, frame: FilmFrame? = null, sample: Bitmap? = null, sampleLoading: Boolean = false, onClick: () -> Unit) {
-    Column(Modifier.width(104.dp).testTag("material-choice-$id").selectable(selected, role = Role.RadioButton, onClick = onClick)
-        .padding(horizontal = 4.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.fillMaxWidth().height(64.dp)) {
+    Column(Modifier.width(124.dp).testTag("material-choice-$id").selectable(selected, role = Role.RadioButton, onClick = onClick)
+        .background(if (selected) ChromeColor else CanvasColor.copy(alpha = .35f), RoundedCornerShape(6.dp))
+        .border(1.dp, if (selected) AccentColor else HairlineColor, RoundedCornerShape(6.dp))
+        .padding(6.dp), horizontalAlignment = Alignment.Start) {
+        Box(Modifier.fillMaxWidth().height(76.dp)) {
             when {
                 frame!=null -> FrameArt(frame,Modifier.fillMaxSize())
                 paper -> PaperSample(id,sample,sampleLoading,Modifier.fillMaxSize())
                 else -> FilmCover(id,Modifier.fillMaxSize())
             }
-            if (selected) Text("✓", Modifier.align(Alignment.BottomEnd).padding(end = 4.dp)
-                .background(AccentColor, RoundedCornerShape(50)).padding(horizontal = 4.dp),
-                color = CanvasColor, fontSize = 12.sp)
+            if (selected) Text("Selected", Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                .background(AccentColor, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 2.dp),
+                color = CanvasColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(7.dp))
         // Reserve the same caption line for all tabs so the photo never jumps.
-        Text(brand.ifBlank { " " }, color = MutedColor, fontSize = 10.sp)
+        Text(brand.ifBlank { " " }, color = MutedColor, fontSize = 10.sp, maxLines = 1)
         Text(name, color = if (selected) AccentColor else PaperWhite, fontSize = 12.sp,
             maxLines = 2, minLines = 2, lineHeight = 16.sp)
     }

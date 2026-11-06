@@ -39,6 +39,7 @@ internal fun ReviewToolbar(
     state: LightTableState, model: LightTableViewModel, onExport: (Set<String>) -> Unit,
     onContact: (PhotoProject, LightTableLayout) -> Unit = { _, _ -> },
     showMarkAction: Boolean = true, showPickAction: Boolean = true, includePageScope: Boolean = true,
+    showExportAction: Boolean = true,
 ) {
     var reviewId by rememberSaveable(state.project?.id) { mutableStateOf<String?>(null) }
     var filters by rememberSaveable(state.project?.id) { mutableStateOf(false) }
@@ -63,7 +64,7 @@ internal fun ReviewToolbar(
                 .semantics { contentDescription = "Toggle current photo pick" },
         ) else Text("${picked.size} picked photos", color = MutedColor,
             modifier = Modifier.heightIn(min = 48.dp).wrapContentHeight().padding(horizontal = 8.dp))
-        Box {
+        if (showExportAction) Box {
             TextButton(onClick = { exports = true }, enabled = state.layoutReady && ids.isNotEmpty(),
                 modifier = Modifier.heightIn(min = 48.dp).testTag("review-export")) { Text("Export") }
             DropdownMenu(exports, { exports = false }) {

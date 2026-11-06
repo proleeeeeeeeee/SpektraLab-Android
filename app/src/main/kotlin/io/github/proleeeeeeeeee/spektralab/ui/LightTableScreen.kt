@@ -8,6 +8,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -18,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.CornerRadius
@@ -61,7 +63,8 @@ internal fun LightTableScreen(project: PhotoProject, model: LightTableViewModel,
         onDispose { lifecycle.removeObserver(observer); model.pause() }
     }
     val viewport: @Composable (Modifier) -> Unit = { modifier ->
-        Box(modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Box(modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            .border(1.dp, HairlineColor, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))) {
             LightTableBoard(state, onSelect = model::select, onMove = model::move,
                 onMoveLoupe = model::moveLoupe, onCommit = model::commit,
                 onEdit = { model.commit(); onEdit(it) }, onDetail = model::loadDetail,
@@ -73,7 +76,7 @@ internal fun LightTableScreen(project: PhotoProject, model: LightTableViewModel,
                 Text("Import regular photos to start selecting and arranging them.", Modifier.padding(vertical = 10.dp),
                     color = if (state.layout.lightOn) PanelColor else MutedColor)
                 Button(onClick = onImport, enabled = !importing && canImport,
-                    modifier = Modifier.heightIn(min = 48.dp)) { Text(if (importing) "Importing…" else "Import photos") }
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-import")) { Text(if (importing) "Importing…" else "Import photos") }
             }
             if (project.photos.isNotEmpty() && state.layoutReady && state.filteredPhotos.isEmpty()) Column(
                 Modifier.align(Alignment.Center).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -95,7 +98,7 @@ internal fun LightTableScreen(project: PhotoProject, model: LightTableViewModel,
             } else {
                 if (!controlsInHost) LightTablePageControls(state, model)
                 viewport(Modifier.weight(1f).fillMaxWidth())
-                if (!controlsInHost) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                if (!controlsInHost) FlowRow(Modifier.fillMaxWidth().background(ChromeColor).padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly) {
                     FilterChip(state.layout.lightOn, { model.setLight(!state.layout.lightOn) },
                         enabled = state.layoutReady, label = { Text("Backlight") },
@@ -160,7 +163,7 @@ private fun LightTablePageControls(state: LightTableState, model: LightTableView
 
 @Composable
 internal fun LightTableControlPanel(state: LightTableState, model: LightTableViewModel) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    Column(Modifier.fillMaxWidth().background(ChromeColor).padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Light-table backlight", Modifier.weight(1f))
             Switch(state.layout.lightOn, model::setLight, enabled = state.layoutReady,

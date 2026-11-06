@@ -96,6 +96,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var generation = 0L
     private var exportJob: Job? = null
     private var interactive = false
+    private var toolStart: EditRecipe? = null
     private var opening: Job? = null
 
     init {
@@ -349,22 +350,46 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun selectFrame(frame: FilmFrame) = apply(state.value.recipe.withFrame(frame))
     fun selectTab(tab: MaterialTab) { mutableState.update { it.copy(material = tab) } }
+
+    /** Tool sheets are transactional: previews stay local until Apply. */
+    fun beginToolEdit() {
+        if (state.value.exporting || state.value.importing || state.value.photo == null) return
+        finishInteraction()
+        if (toolStart == null) toolStart = history.current
+    }
+    fun cancelToolEdit() {
+        val original = toolStart ?: return
+        toolStart = null; interactive = false
+        mutableState.update { it.copy(recipe = original, photo = it.photo?.copy(recipe = original)) }
+        requestPreview(persist = false)
+    }
+    fun commitToolEdit() {
+        val original = toolStart ?: return
+        val edited = state.value.recipe
+        toolStart = null; interactive = false
+        check(history.current == original) { "Edit history changed while a tool was open" }
+        if (history.apply(edited)) publishRecipe() else requestPreview(persist = false)
+    }
+    fun restoreRecipe(recipe: EditRecipe) {
+        toolStart = null; interactive = false
+        if (history.apply(recipe)) publishRecipe() else requestPreview()
+    }
     fun adjust(control: Adjustment, value: Float) {
         if (state.value.exporting || state.value.importing || state.value.photo == null) return
-        interactive = true
+        interactive = toolStart == null
         val recipe = state.value.recipe
         mutableState.update { it.copy(recipe = recipe.copy(adjustments = control.write(recipe.adjustments, value))) }
-        requestPreview()
+        requestPreview(persist = toolStart == null)
     }
     fun straighten(value: Float) {
         if (!value.isFinite() || state.value.exporting || state.value.photo == null) return
-        interactive = true
+        interactive = toolStart == null
         mutableState.update { it.copy(recipe = it.recipe.copy(
             composition = it.recipe.composition.copy(straighten = value.toDouble().coerceIn(-15.0,15.0)))) }
-        requestPreview()
+        requestPreview(persist = toolStart == null)
     }
     fun finishInteraction() {
-        if (!interactive) return
+        if (!interactive || toolStart != null) return
         interactive = false
         history.apply(state.value.recipe)
         publishRecipe()
@@ -382,8 +407,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val c = state.value.recipe.composition
         apply(state.value.recipe.copy(composition = if (horizontal) c.copy(flipH = !c.flipH) else c.copy(flipV = !c.flipV)))
     }
-    fun undo() { if (!state.value.exporting) { finishInteraction(); history.undo(); publishRecipe() } }
-    fun redo() { if (!state.value.exporting) { finishInteraction(); history.redo(); publishRecipe() } }
+    fun undo() { if (!state.value.exporting && toolStart == null) { finishInteraction(); history.undo(); publishRecipe() } }
+    fun redo() { if (!state.value.exporting && toolStart == null) { finishInteraction(); history.redo(); publishRecipe() } }
     fun prepareLightTable() {
         if (state.value.exporting || state.value.importing) return
         finishInteraction();stopPreview()
@@ -411,6 +436,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private fun apply(recipe: EditRecipe) {
         if (state.value.exporting || state.value.importing || state.value.photo == null) return
+        if (toolStart != null) {
+            interactive = false
+            mutableState.update { it.copy(recipe = recipe, photo = it.photo?.copy(recipe = recipe)) }
+            requestPreview(persist = false)
+            return
+        }
         finishInteraction()
         if (history.apply(recipe)) publishRecipe()
     }
@@ -429,21 +460,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         requests.value = null
         mutableState.update { it.copy(rendering = false, fastAdjustments = null) }
     }
-    private fun requestPreview() {
+    private fun requestPreview(persist: Boolean = true) {
         val current = state.value
         val photo = current.photo ?: return
         val input = current.original ?: return
         if (!current.ready || current.exporting) return
-        val versioned = photo.copy(recipe = current.recipe,revision = photo.revision+1)
+        val versioned = if (persist) photo.copy(recipe = current.recipe,revision = photo.revision+1)
+            else photo.copy(recipe = current.recipe)
         warmJob?.cancel(); warmJob = null
         val fast = interactive && ScanPreviewShader.supported && current.neutralPreview != null &&
             neutralPhotoId == photo.id && neutralRecipe == current.recipe.scanBase()
         // Keep the last completed image explicitly marked as updating. Its
         // recipe remains separate, so stale pixels never claim to be current.
-        mutableState.update { it.copy(photo = versioned, rendering = true, savingEdits = true,
+        mutableState.update { it.copy(photo = versioned, rendering = true, savingEdits = if (persist) true else it.savingEdits,
             fastAdjustments = if (fast) current.recipe.adjustments else it.fastAdjustments?.takeIf { _ ->
                 neutralPhotoId == photo.id && neutralRecipe == current.recipe.scanBase() }?.let { current.recipe.adjustments }) }
-        pendingSaves[versioned.id]=versioned;saveSignals.trySend(Unit)
+        if (persist) { pendingSaves[versioned.id]=versioned;saveSignals.trySend(Unit) }
         engine.cancel()
         val token = ++generation
         requests.value = if (fast) null else PreviewRequest(token,versioned,input,current.recipe,

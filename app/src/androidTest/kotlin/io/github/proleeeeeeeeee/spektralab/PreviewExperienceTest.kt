@@ -93,10 +93,12 @@ class PreviewExperienceTest {
                 assertArrayEquals("Gesture release must match native float processing",pixels(reference),pixels(state.preview!!))
             }
             capture("editor")
-            compose.onNodeWithTag("editor-tool-frame").performScrollTo().performClick()
+            compose.onNodeWithTag("editor-tool-frame").performClick()
             compose.onNodeWithTag("material-choice-STRIP_135").performScrollTo().performClick();settled()
             capture("frame")
             compose.onNodeWithTag("editor-back").performClick()
+            compose.onNodeWithTag("editor-back").performClick()
+            compose.onNodeWithTag("editor-save-close").performClick()
             compose.onNodeWithTag("nav-presets").performClick()
             compose.onNodeWithTag("presets-screen").assertIsDisplayed()
             compose.onAllNodesWithTag("nav-materials").assertCountEquals(0)

@@ -3,7 +3,9 @@
 package io.github.proleeeeeeeeee.spektralab.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -36,7 +42,7 @@ internal fun PhotosWorkspace(
     var multiple by rememberSaveable(project.id) { mutableStateOf(false) }
     var markId by rememberSaveable(project.id) { mutableStateOf<String?>(null) }
     var deleteSelection by remember { mutableStateOf(false) }
-    var importMenu by remember { mutableStateOf(false) }
+    // Import is a stable collection action at the bottom of the workspace.
     var reviewControls by rememberSaveable { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val latestProject by rememberUpdatedState(project)
@@ -57,27 +63,36 @@ internal fun PhotosWorkspace(
     val visible = if (metadataReady) light.filteredPhotos else project.photos
     val isSelecting = multiple || state.selection.isNotEmpty()
     val header: @Composable () -> Unit = {
-        Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             ProjectActions(state, model, Modifier.weight(1f), onImport, onFiles)
-            Box {
-                TextButton(onClick={importMenu=true},enabled=state.ready && !state.importing && !state.exporting,
-                    modifier=Modifier.heightIn(min=48.dp).testTag("workspace-import-menu")) { Text("+ Import") }
-                DropdownMenu(importMenu,{importMenu=false}) {
-                    DropdownMenuItem(text={Text("Photos")},onClick={importMenu=false;onImport()},modifier=Modifier.testTag("workspace-import"))
-                    DropdownMenuItem(text={Text("Files / RAW")},onClick={importMenu=false;onFiles()},modifier=Modifier.testTag("workspace-import-files"))
-                }
+            TextButton(onClick = onSettings, modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-settings")) {
+                Text("Settings", color = MutedColor)
             }
-            TextButton(onClick = onSettings, modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-settings")) { Text("Settings") }
         }
-        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            FilterChip(!showLightTable, { onViewChange(false) }, label = { Text("Library") },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-view-grid"))
-            FilterChip(showLightTable, { onViewChange(true) }, label = { Text("Light table") },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-view-table"))
+        Text("${project.photos.size} ${if (project.photos.size == 1) "photograph" else "photographs"}  ·  On this device",
+            Modifier.padding(horizontal = 18.dp).padding(bottom = 10.dp), color = MutedColor,
+            style = MaterialTheme.typography.bodySmall)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).background(ChromeColor, RoundedCornerShape(10.dp)).padding(4.dp)) {
+            TextButton({ onViewChange(false) },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                    .background(if (!showLightTable) RaisedColor else Color.Transparent, RoundedCornerShape(7.dp))
+                    .testTag("workspace-view-grid").semantics { selected = !showLightTable }) {
+                Text("Library", color = if (!showLightTable) PaperWhite else MutedColor, fontWeight = if (!showLightTable) FontWeight.SemiBold else FontWeight.Normal)
+            }
+            TextButton({ onViewChange(true) },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                    .background(if (showLightTable) RaisedColor else Color.Transparent, RoundedCornerShape(7.dp))
+                    .testTag("workspace-view-table").semantics { selected = showLightTable }) {
+                Text("Light table", color = if (showLightTable) PaperWhite else MutedColor, fontWeight = if (showLightTable) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (!showLightTable && project.photos.isNotEmpty()) TextButton(onClick = {
                 if (isSelecting) { model.clearSelection(); multiple = false } else multiple = true
-            }, modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-multiselect")) { Text(if (isSelecting) "Finish selection" else "Select") }
+            }, modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-multiselect")) {
+                Text(if (isSelecting) "Done selecting" else "Select", color = if (isSelecting) AccentColor else MutedColor)
+            }
             if (showLightTable || isSelecting) Text("${visible.size} / ${project.photos.size} photos", Modifier.heightIn(min = 48.dp).wrapContentHeight(),
                 style = MaterialTheme.typography.bodySmall, color = MutedColor)
             if (!showLightTable && !isSelecting) TextButton(onClick={reviewControls=!reviewControls},modifier=Modifier.heightIn(min=48.dp).testTag("workspace-review-controls")) {
@@ -94,8 +109,9 @@ internal fun PhotosWorkspace(
             Text(light.error.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = lightModel::retry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry loading") }
         }
-        if (showLightTable || isSelecting || reviewControls) ReviewToolbar(light, lightModel, onExportSelection, onContactSheet,
-            showMarkAction = showLightTable, showPickAction = false, includePageScope = showLightTable)
+        if (showLightTable || reviewControls) ReviewToolbar(light, lightModel, onExportSelection, onContactSheet,
+            showMarkAction = showLightTable, showPickAction = false, includePageScope = showLightTable,
+            showExportAction = showLightTable)
         if (!showLightTable && isSelecting) FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             TextButton(onClick = {
                 model.clearSelection(); visible.forEach { model.toggleSelected(it.id) }
@@ -128,11 +144,13 @@ internal fun PhotosWorkspace(
         }
         if (!state.ready) Text(if (state.initializing) "Preparing local processing…" else "The processing engine is not ready. Check the message above.",
             Modifier.padding(horizontal = 16.dp), color = MutedColor, style = MaterialTheme.typography.bodySmall)
-        if (project.photos.isEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!showLightTable && !isSelecting) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onImport, enabled = state.ready && !state.importing && !state.exporting,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("workspace-import-empty")) { Text("Import photos") }
+                colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = CanvasColor),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("workspace-import-empty")) { Text("Add photos", fontWeight = FontWeight.SemiBold) }
             OutlinedButton(onClick = onFiles, enabled = state.ready && !state.importing && !state.exporting,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("workspace-files-empty")) { Text("RAW / files") }
+                shape = RoundedCornerShape(8.dp), modifier = Modifier.heightIn(min = 52.dp).testTag("workspace-files-empty")) { Text("RAW / files") }
         }
     }
     val body: @Composable (Modifier, Boolean) -> Unit = { modifier, wide ->

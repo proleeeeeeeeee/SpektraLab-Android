@@ -45,11 +45,30 @@ void put32(std::vector<uint8_t>& b,uint32_t value) { put16(b,value&65535);put16(
 float linear(float v) { return v<=.04045f?v/12.92f:std::pow((v+.055f)/1.055f,2.4f); }
 }
 
-std::vector<uint8_t> scan_rgba(const std::vector<float>& rgb,const ScanTone& tone,std::atomic<bool>& cancelled) {
+bool PhotoRegion::contains(uint32_t x,uint32_t y,uint32_t width,uint32_t height) const {
+    if (!active || !width || !height) return true;
+    const float px=(float(x)+.5f)/float(width),py=(float(y)+.5f)/float(height);
+    bool positive=false,negative=false;
+    for (int i=0;i<4;++i) {
+        const int j=(i+1)%4;
+        const float ax=gate[i*2],ay=gate[i*2+1],bx=gate[j*2],by=gate[j*2+1];
+        const float cross=(bx-ax)*(py-ay)-(by-ay)*(px-ax);
+        positive|=cross>1e-6f;negative|=cross< -1e-6f;
+        if (positive&&negative) return false;
+    }
+    return true;
+}
+
+std::vector<uint8_t> scan_rgba(const std::vector<float>& rgb,const ScanTone& tone,std::atomic<bool>& cancelled,
+                               uint32_t width,uint32_t height,const PhotoRegion& photo) {
+    if (photo.active && (!width || !height || rgb.size()!=uint64_t(width)*height*3))
+        throw std::invalid_argument("Invalid photo gate dimensions");
     std::vector<uint8_t> rgba(rgb.size()/3*4);
     for (size_t i=0;i<rgb.size()/3;++i) {
         if (i%65536==0) check(cancelled);
-        const auto color=tone.apply(rgb[i*3],rgb[i*3+1],rgb[i*3+2]);
+        const bool grade=!photo.active||photo.contains(uint32_t(i%width),uint32_t(i/width),width,height);
+        const auto color=grade?tone.apply(rgb[i*3],rgb[i*3+1],rgb[i*3+2]):
+            std::array<float,3>{std::clamp(rgb[i*3],0.f,1.f),std::clamp(rgb[i*3+1],0.f,1.f),std::clamp(rgb[i*3+2],0.f,1.f)};
         for (int c=0;c<3;++c) rgba[i*4+c]=uint8_t(std::lround(color[c]*255.f));
         rgba[i*4+3]=255;
     }
@@ -76,7 +95,8 @@ void encode_image(const std::string& path,uint32_t w,uint32_t h,
 }
 
 void write_tiff16(const std::string& path,const std::string& profile,uint32_t w,uint32_t h,
-                  const std::vector<float>& rgb,const ScanTone& tone,std::atomic<bool>& cancelled) {
+                  const std::vector<float>& rgb,const ScanTone& tone,std::atomic<bool>& cancelled,
+                  const PhotoRegion& photo) {
     if (!w || !h || rgb.size()!=uint64_t(w)*h*3) throw std::invalid_argument("Invalid TIFF dimensions");
     std::ifstream input(profile,std::ios::binary|std::ios::ate);
     if (!input || input.tellg()<128 || input.tellg()>1024*1024) throw std::runtime_error("The sRGB output profile is unavailable");
@@ -106,7 +126,9 @@ void write_tiff16(const std::string& path,const std::string& profile,uint32_t w,
         check(cancelled);row.clear();
         for (uint32_t x=0;x<w;++x) {
             const size_t i=(size_t(y)*w+x)*3;
-            const auto color=tone.apply(rgb[i],rgb[i+1],rgb[i+2]);
+            const auto color=photo.active&&!photo.contains(x,y,w,h)?
+                std::array<float,3>{std::clamp(rgb[i],0.f,1.f),std::clamp(rgb[i+1],0.f,1.f),std::clamp(rgb[i+2],0.f,1.f)}:
+                tone.apply(rgb[i],rgb[i+1],rgb[i+2]);
             for (float v:color) put16(row,uint16_t(std::lround(v*65535.f)));
         }
         if (!file.bytes(row.data(),row.size())) throw std::runtime_error("TIFF pixel write failed");
@@ -115,7 +137,8 @@ void write_tiff16(const std::string& path,const std::string& profile,uint32_t w,
 }
 
 GainMapPixels make_gain_map(uint32_t w,uint32_t h,const std::vector<uint8_t>& sdr,
-                            const std::vector<float>& hdr,const ScanTone& tone,std::atomic<bool>& cancelled) {
+                            const std::vector<float>& hdr,const ScanTone& tone,std::atomic<bool>& cancelled,
+                            const PhotoRegion& photo) {
     if (sdr.size()!=uint64_t(w)*h*4 || hdr.size()!=uint64_t(w)*h*3)
         throw std::invalid_argument("HDR and SDR dimensions differ");
     GainMapPixels result{(w+3)/4,(h+3)/4,1.f,1.f,{}};
@@ -127,7 +150,9 @@ GainMapPixels make_gain_map(uint32_t w,uint32_t h,const std::vector<uint8_t>& sd
             std::array<float,3> sum{};int samples=0;
             for (uint32_t y=gy*4;y<std::min(h,gy*4+4);++y) for (uint32_t x=gx*4;x<std::min(w,gx*4+4);++x) {
                 const size_t i=size_t(y)*w+x;
-                const auto color=tone.apply(hdr[i*3],hdr[i*3+1],hdr[i*3+2],true);
+                const auto color=photo.active&&!photo.contains(x,y,w,h)?
+                    std::array<float,3>{std::clamp(hdr[i*3],0.f,8.f),std::clamp(hdr[i*3+1],0.f,8.f),std::clamp(hdr[i*3+2],0.f,8.f)}:
+                    tone.apply(hdr[i*3],hdr[i*3+1],hdr[i*3+2],true);
                 for (int c=0;c<3;++c) {
                     const float ratio=std::clamp((linear(color[c])+epsilon)/(linear(sdr[i*4+c]/255.f)+epsilon),1.f/16.f,16.f);
                     sum[c]+=std::log(ratio);

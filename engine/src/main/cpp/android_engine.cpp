@@ -36,3 +36,41 @@ bool android_float_render(spk_session* session, std::vector<float>& output,
     session->progress.done = true;
     return true;
 }
+
+bool android_overscan_gate(spk_session* session, std::array<float, 8>& gate,
+                           std::string& error) {
+    gate = {};
+    if (!session) { error = "Missing render session"; return false; }
+    std::lock_guard<std::mutex> guard(session->lock);
+    try {
+        spk::Json layout;
+        if (!spk::Json::parse(session->pipeline->overscan_geometry_json(), layout, error))
+            return false;
+        if (!layout.is_object() || !layout.has("valid") || !layout.at("valid").as_bool(false)) {
+            error = "The film frame geometry is unavailable";
+            return false;
+        }
+        const auto& gates = layout.at("gates");
+        if (!gates.is_array() || gates.items().empty()) {
+            error = "The film frame has no image gate";
+            return false;
+        }
+        const auto& points = gates.items().front();
+        if (!points.is_array() || points.items().size() != gate.size()) {
+            error = "The film frame gate is invalid";
+            return false;
+        }
+        for (size_t i = 0; i < gate.size(); ++i) {
+            const auto& value = points.items()[i];
+            if (!value.is_number() || !std::isfinite(value.as_double())) {
+                error = "The film frame gate contains an invalid coordinate";
+                return false;
+            }
+            gate[i] = float(value.as_double());
+        }
+        return true;
+    } catch (const std::exception& failure) {
+        error = std::string("Film frame geometry failed: ") + failure.what();
+        return false;
+    }
+}

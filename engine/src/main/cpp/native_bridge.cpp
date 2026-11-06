@@ -34,6 +34,7 @@ struct EngineContext {
     std::string resources;
     std::vector<float> float_scan;
     uint32_t float_width=0,float_height=0;
+    PhotoRegion photo_region;
     spk_result cached_result{};
     std::atomic<bool> cancelled{false};
     std::mutex render_mutex;
@@ -250,6 +251,7 @@ void release_source(EngineContext& c) {
     if (c.session) { spk_session_release(c.session);c.session=nullptr; }
     spk_result_free(&c.cached_result);c.source_key.clear();c.rendered_parameters.clear();c.applied_parameters.clear();
     std::vector<float>().swap(c.float_scan);
+    c.photo_region={};
 }
 std::string source_parameters(const std::string& params,bool raw,bool hdr) {
     spk::Json json;std::string error;
@@ -288,6 +290,41 @@ void float_render(EngineContext& c,const std::string& params,std::vector<float>&
     if (!android_float_render(c.session,pixels,w,h,error,&negative_hit)) throw std::runtime_error("High-precision render failed: "+error);
     if (c.cancelled.load()) throw std::runtime_error("Processing cancelled");
     c.print_renders++;if (!negative_hit) c.negative_builds++;
+}
+PhotoRegion finish_frame_after_adjustments(EngineContext& c,const std::string& params,
+                                           std::vector<float>& photo,uint32_t w,uint32_t h) {
+    spk::Json current;std::string error;
+    if (!spk::Json::parse(params,current,error) || !current.is_object())
+        throw std::invalid_argument("Invalid frame render settings");
+    if (!current.has("overscan_active") || !current.at("overscan_active").as_bool(false)) return {};
+    PhotoRegion region;region.active=true;
+    if (!android_overscan_gate(c.session,region.gate,error))
+        throw std::runtime_error("Film frame layout failed: "+error);
+
+    // The photograph keeps the user's physical exposure, grain and halation.
+    // Render the surrounding film at stable defaults and replace only pixels
+    // outside the gate. Scan-tone controls are also limited to the gate later.
+    auto frame=current;
+    frame.set("auto_exposure",spk::Json(true));
+    frame.set("exposure_compensation_ev",spk::Json(0.0));
+    frame.set("grain_active",spk::Json(true));
+    frame.set("grain_amount",spk::Json(1.0));
+    frame.set("halation_active",spk::Json(true));
+    frame.set("halation_amount",spk::Json(1.0));
+    const auto frame_params=frame.dump();
+    if (frame_params!=params) {
+        std::vector<float> stable;uint32_t fw=0,fh=0;
+        float_render(c,frame_params,stable,fw,fh);
+        if (fw!=w||fh!=h||stable.size()!=photo.size())
+            throw std::runtime_error("Frame and photograph geometry differ");
+        for (uint32_t y=0;y<h;++y) for(uint32_t x=0;x<w;++x) {
+            if (region.contains(x,y,w,h)) continue;
+            const size_t i=(size_t(y)*w+x)*3;
+            photo[i]=stable[i];photo[i+1]=stable[i+1];photo[i+2]=stable[i+2];
+        }
+        update_parameters(c,params);
+    }
+    return region;
 }
 jobject bitmap_rgba(JNIEnv* env,uint32_t w,uint32_t h,const std::vector<uint8_t>& pixels) {
     jclass bitmap=env->FindClass("android/graphics/Bitmap");
@@ -329,10 +366,13 @@ jobject render_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring source
             // Cancellation can occur after readback. Never let partially replaced
             // pixels keep the previous recipe's cache identity.
             c->rendered_parameters.clear();
-            float_render(*c,params,c->float_scan,c->float_width,c->float_height);c->rendered_parameters=params;
+            float_render(*c,params,c->float_scan,c->float_width,c->float_height);
+            c->photo_region=finish_frame_after_adjustments(*c,params,c->float_scan,c->float_width,c->float_height);
+            c->rendered_parameters=params;
         }
         c->tone_scans++;
-        return bitmap_rgba(env,c->float_width,c->float_height,scan_rgba(c->float_scan,tone,c->cancelled));
+        return bitmap_rgba(env,c->float_width,c->float_height,
+            scan_rgba(c->float_scan,tone,c->cancelled,c->float_width,c->float_height,c->photo_region));
     } catch (const std::exception& e) { throw_error(env,e.what());return nullptr; }
 }
 jfloatArray export_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring parameters,jfloatArray scan_tone,
@@ -351,17 +391,19 @@ jfloatArray export_file(JNIEnv* env,jobject,jlong handle,jstring file,jstring pa
         struct Cleanup { EngineContext& c;~Cleanup(){release_source(c);} } cleanup{*c};
         open_source(*c,path,"export",params,edge,uint64_t(budget));
         std::vector<float> sdr;uint32_t w=0,h=0;float_render(*c,params,sdr,w,h);
+        const auto photo=finish_frame_after_adjustments(*c,params,sdr,w,h);
         float low=1.f,high=1.f;
-        if (format==2) write_tiff16(output,c->resources+"/io/sRGB.icc",w,h,sdr,tone,c->cancelled);
+        if (format==2) write_tiff16(output,c->resources+"/io/sRGB.icc",w,h,sdr,tone,c->cancelled,photo);
         else {
-            auto rgba=scan_rgba(sdr,tone,c->cancelled);
+            auto rgba=scan_rgba(sdr,tone,c->cancelled,w,h,photo);
             std::vector<float>().swap(sdr);
             if (format==3) {
                 std::vector<float> hdr;uint32_t hw=0,hh=0;
                 const auto hdr_params=source_parameters(params,raw,true);
                 float_render(*c,hdr_params,hdr,hw,hh);
+                const auto hdr_photo=finish_frame_after_adjustments(*c,hdr_params,hdr,hw,hh);
                 if (hw!=w || hh!=h) throw std::runtime_error("HDR and SDR render geometry differs");
-                auto gain=make_gain_map(w,h,rgba,hdr,tone,c->cancelled);low=gain.minimum;high=gain.maximum;
+                auto gain=make_gain_map(w,h,rgba,hdr,tone,c->cancelled,hdr_photo);low=gain.minimum;high=gain.maximum;
                 encode_image(utf8(env,gain_path,4096),gain.width,gain.height,gain.rgba,true,100,c->cancelled);
             }
             encode_image(output,w,h,rgba,format==1 || format==3,quality,c->cancelled);

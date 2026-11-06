@@ -46,6 +46,12 @@ class WindowLayoutWorkflowTest {
             val image=compose.onNodeWithTag("editor-preview-image").fetchSemanticsNode().boundsInRoot
             val density=context.resources.displayMetrics.density
             assertTrue("Editor photo area collapsed: $image",image.width>=120*density && image.height>=100*density)
+            clickReachable(compose.onNodeWithTag("editor-tool-frame"))
+            compose.onNodeWithTag("editor-export").assertIsDisplayed().assertIsEnabled()
+            val finishImage=compose.onNodeWithTag("editor-preview-image").fetchSemanticsNode().boundsInRoot
+            assertTrue("Finish photo area collapsed: $finishImage",finishImage.width>=120*density && finishImage.height>=100*density)
+            capture("finish")
+            clickReachable(compose.onNodeWithTag("editor-back"))
             if (compose.onAllNodesWithTag("open-material-browser").fetchSemanticsNodes().isEmpty())
                 clickReachable(compose.onNodeWithTag("editor-tool-film"))
             clickReachable(compose.onNodeWithTag("open-material-browser"))

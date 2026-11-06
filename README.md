@@ -11,7 +11,9 @@ The device-test build targets the Galaxy S25 Ultra (arm64, Android 11 or newer w
 ## Current workflow
 
 - Photos / Presets / Negatives navigation, contextual library actions and a dedicated saved-look library.
-- A photo-first editor with independent Film / Print / Frame / Adjust / Crop tools; the full material catalog stays inside the editor.
+- A neutral darkroom interface with a portfolio-style photo grid and clear material selection.
+- A photo-first Crop / Film / Print / Adjust editor; Finish adds the independent Frame layer and one primary export action.
+- Tool panels preview changes until Apply; Cancel restores the tool's starting recipe. Leaving an edited photo offers Save and close, Discard, or Keep editing.
 - Immediate discrete preview requests, bounded recent-recipe caching and idle neighbor-film warm-up. Previous pixels remain labeled while updating.
 - GPU scan-tone drag previews on Android 13+, followed by exact native float previews on release. Older devices use native draft previews.
 - System multi-photo picker and document picker for RAW files; access is limited to selected files.
@@ -74,6 +76,8 @@ Install the official Android SDK/NDK and a host glslangValidator before building
 | third_party/libraw | Unmodified LibRaw 0.22.2 source, using its LGPL-2.1 license option |
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [PRIVACY.md](docs/PRIVACY.md).
+
+See [v0.8 UI validation](docs/UI-v08.md) for the tested workflows and remaining device/export limits.
 
 ## Credits and licenses
 

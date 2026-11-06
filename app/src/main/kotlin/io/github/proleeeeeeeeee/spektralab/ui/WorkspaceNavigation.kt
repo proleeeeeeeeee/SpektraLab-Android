@@ -20,12 +20,12 @@ internal enum class WorkspaceOverlay { NONE, PHOTO_EXPORT, BATCH_EXPORT, PRESETS
 internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print"), FRAME("Frame"), ADJUST("Adjust"), CROP("Crop") }
 
 @Composable internal fun WorkspaceNavigation(page: WorkspacePage, enabled: Boolean, onSelect: (WorkspacePage) -> Unit) {
-    NavigationBar(containerColor = PanelColor, windowInsets = WindowInsets(0, 0, 0, 0), modifier = Modifier.testTag("workspace-navigation")) {
+    NavigationBar(containerColor = ChromeColor, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0), modifier = Modifier.testTag("workspace-navigation")) {
         listOf(Triple(WorkspacePage.PHOTOS, "Photos", "photos"), Triple(WorkspacePage.PRESETS, "Presets", "presets"), Triple(WorkspacePage.NEGATIVE, "Negatives", "negatives")).forEach { (target, label, tag) ->
             NavigationBarItem(selected = page == target, onClick = { onSelect(target) }, enabled = enabled,
                 icon = { NavigationGlyph(target, if (page == target) AccentColor else MutedColor) }, label = { Text(label) },
                 modifier = Modifier.heightIn(min = 56.dp).testTag("nav-$tag"),
-                colors = NavigationBarItemDefaults.colors(indicatorColor = CanvasColor, selectedTextColor = AccentColor, unselectedTextColor = MutedColor))
+                colors = NavigationBarItemDefaults.colors(indicatorColor = RaisedColor, selectedTextColor = PaperWhite, unselectedTextColor = MutedColor))
         }
     }
 }
@@ -44,7 +44,7 @@ internal enum class EditorPane(val title: String) { FILM("Film"), PAPER("Print")
             else -> for ((index, x) in listOf(8f, 16f, 11f).withIndex()) {
                 val y = (5f + index * 7f) * unit
                 drawLine(color, Offset(3f * unit, y), Offset(21f * unit, y), 1.4f * unit)
-                drawCircle(PanelColor, 3f * unit, Offset(x * unit, y))
+                drawCircle(ChromeColor, 3f * unit, Offset(x * unit, y))
                 drawCircle(color, 2.6f * unit, Offset(x * unit, y), style = stroke)
             }
         }
